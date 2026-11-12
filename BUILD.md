@@ -22,6 +22,9 @@ npx --yes @tauri-apps/cli@^2 build
 
 前端**不用**先构建：`apps/desktop-shell/web/index.html` 是入库的加密壳，`tauri build` 直接拿它。
 
+Windows 上 `WebView2Loader.dll` 有时不会落到 `target/release`（取决于 cargo 版本），在 cargo 注册表里取一份 x64 的放到 exe 旁边即可：
+`~/.cargo/registry/src/*/webview2-com-sys-*/x64/WebView2Loader.dll`。少了它双击没反应。
+
 万一双击没反应，八成是系统缺 WebView2 运行时（Win11 自带；Win10 到微软官网装「WebView2 Runtime」，免费）。
 
 ---
@@ -62,6 +65,14 @@ gh run watch
 Artifacts 里会有模拟器包（`.app`）和未签名 ipa。公开仓库的 macOS runner 不计费。
 怎么装到 iPhone（免费 Apple ID 自签、7 天有效期）见
 [`apps/android/kuikly/iosApp/README-IOS.md`](apps/android/kuikly/iosApp/README-IOS.md)。
+
+---
+
+## 出成品（Release 上的三端）
+
+不用本地编：`Actions → 出成品（Windows + 安卓）→ Run workflow`，填一个已存在的 tag（`which` 选 `all` / `windows` / `android`）。
+Windows 那条编便携 zip（启动器 + 本体 + WebView2Loader），安卓那条编 APK 并挂到同一个 Release。
+iOS 走下面的 `ios-sim.yml`。
 
 ---
 
