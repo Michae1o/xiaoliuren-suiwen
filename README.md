@@ -37,13 +37,23 @@
 
 ## 界面
 
-| 起卦 | 断卦 |
-|---|---|
-| ![起卦](docs/images/desktop-cast.png) | ![断卦](docs/images/desktop-divination.png) |
+桌面（Windows / macOS）：
 
-| 卦例本 | 皮肤 |
-|---|---|
-| ![卦例本](docs/images/desktop-records.png) | ![皮肤](docs/images/desktop-skins.png) |
+| 问卦 | 排盘 | 卦例本 |
+|---|---|---|
+| ![问卦](docs/images/desktop-ask.png) | ![排盘](docs/images/desktop-hexagram.png) | ![卦例本](docs/images/desktop-records.png) |
+
+手机（安卓与 iOS 是同一套界面，下面这组是 iOS 实机）：
+
+| 断卦 | 卦例本 | 外观 / 皮肤 |
+|---|---|---|
+| ![断卦](docs/images/phone-hexagram.jpg) | ![卦例本](docs/images/phone-records.jpg) | ![皮肤](docs/images/phone-skins.jpg) |
+
+开屏（手机端录屏，四秒多）：<br>
+<img src="docs/images/splash.gif" width="300" alt="开屏动画">
+
+> 图都是真机 / 真窗口截的，没有修图。皮肤、雾气的浓淡以你自己装上去看到的为准。
+
 
 ## 有哪几个端
 
