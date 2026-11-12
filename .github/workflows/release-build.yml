@@ -38,11 +38,19 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $rel = 'apps/desktop-shell/src-tauri/target/release'
+          # WebView2Loader.dll 由 webview2-com-sys 随包提供，MSVC 构建时不一定落到 target/release，缺了就从 cargo 源码缓存里取 x64 那份
+          $dll = Join-Path $rel 'WebView2Loader.dll'
+          if (-not (Test-Path $dll)) {
+            $src = Get-ChildItem "$env:USERPROFILE\.cargo\registry\src\*\webview2-com-sys-*\x64\WebView2Loader.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (-not $src) { throw 'WebView2Loader.dll 找不到：cargo 缓存里也没有 webview2-com-sys' }
+            Copy-Item $src.FullName $dll
+            Write-Host "从 $($src.FullName) 取了 WebView2Loader.dll"
+          }
           New-Item -ItemType Directory -Force 'out/app' | Out-Null
           Copy-Item 'apps/desktop-shell/pkg/遂问.exe'      'out/'
           Copy-Item 'apps/desktop-shell/pkg/使用说明.txt'   'out/'
           Copy-Item "$rel/xiaoliuren.exe"                  'out/app/'
-          Copy-Item "$rel/WebView2Loader.dll"              'out/app/'
+          Copy-Item $dll                                   'out/app/'
           $ver = (Get-Content 'apps/desktop-shell/src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json).version
           Compress-Archive -Path 'out/*' -DestinationPath "Suiwen-Windows-$ver.zip" -Force
           Get-ChildItem 'out' -Recurse | Select-Object FullName, Length
