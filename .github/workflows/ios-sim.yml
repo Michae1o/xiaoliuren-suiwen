@@ -1,0 +1,297 @@
+name: iOS 构建（模拟器包 + 未签名 ipa）
+
+# 目的：在 Windows 上开发，把「编 iOS」交给 GitHub 的 macOS runner。
+#   · simulator job → 免签名的 .app，装进模拟器就能看界面
+#   · ipa job      → 免签名的实机 .ipa（用 Sideloadly / AltStore 拿自己的 Apple ID 自签后装 iPhone，
+#                     7 天有效；不需要 688 的开发者年费）
+#
+# 免费额度：公开仓库的 macOS runner 不计费；私有仓库按 ×10 计分钟（每月 2000 → 实跑约 200 分钟）。
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'apps/android/kuikly/**'
+      - '.github/workflows/ios-sim.yml'
+  pull_request:
+    paths:
+      - 'apps/android/kuikly/**'
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ------------------------------------------------------------------ 模拟器包
+  # ⚠ 这个 job 现在是「附加项」：实机 ipa 成功就够了，模拟器包链接失败不会让整轮变红
+  #   （第四轮实测：ipa 全绿，但 simulator 在 xcodebuild 链接阶段报 clang error；
+  #    没有 Mac 的情况下模拟器包也没人用，先不阻塞主流程。）
+  simulator:
+    runs-on: macos-26
+    timeout-minutes: 90
+    continue-on-error: true
+
+    steps:
+      - name: 取代码
+        uses: actions/checkout@v4
+
+      - name: 环境自检
+        run: |
+          xcodebuild -version
+          sw_vers
+          pod --version || true
+
+      - name: 装 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Kotlin/Native 的编译器包（~/.konan）不缓存的话每轮要重下几百 MB
+      - name: 缓存 Gradle / Kotlin/Native
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.konan
+          key: konan-${{ runner.os }}-${{ hashFiles('apps/android/kuikly/gradle/wrapper/gradle-wrapper.properties', 'apps/android/kuikly/build.gradle.kts', 'apps/android/kuikly/shared/build.gradle.kts') }}
+          restore-keys: |
+            konan-${{ runner.os }}-
+
+      - name: 选镜像里最新的 Xcode
+        run: |
+          ls /Applications | grep -i '^Xcode' || true
+          newest=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "用 $newest"
+          sudo xcode-select -s "$newest"
+          xcodebuild -version
+      - name: 缓存 framework 产物（只改 Swift 时可跳过重编）
+        uses: actions/cache@v4
+        with:
+          # 只缓存「Kotlin 侧没变时能复用」的编译产物；key 里带 src 全量哈希，
+          # 资源/代码一变 key 就变，不会拿到早期产物。
+          path: |
+            apps/android/kuikly/.gradle
+            apps/android/kuikly/build
+            apps/android/kuikly/shared/build
+            apps/android/kuikly/androidApp/build
+          key: kbuild-${{ runner.os }}-${{ hashFiles('apps/android/kuikly/shared/src/**', 'apps/android/kuikly/**/*.kts', 'apps/android/kuikly/gradle/wrapper/gradle-wrapper.properties') }}
+      - name: 编业务 framework（shared · 模拟器 arm64）
+        working-directory: apps/android/kuikly
+        run: |
+          chmod +x gradlew
+          ./gradlew :shared:linkDebugFrameworkIosSimulatorArm64 --no-daemon --stacktrace
+
+      - name: 拷 framework + 安卓资源进壳工程
+        working-directory: apps/android/kuikly
+        run: |
+          mkdir -p iosApp/Frameworks
+          rm -rf iosApp/Frameworks/shared.framework
+          cp -R shared/build/bin/iosSimulatorArm64/debugFramework/shared.framework iosApp/Frameworks/
+          # 资源：保持 assets/ 的原相对路径（Kuikly 侧按 assets://common/... 找图）
+          rm -rf iosApp/Assets && mkdir -p iosApp/Assets
+          cp -R androidApp/src/main/assets/. iosApp/Assets/
+          echo "framework:"; ls -la iosApp/Frameworks/shared.framework | head -5
+          echo "assets 文件数: $(find iosApp/Assets -type f | wc -l)"
+
+      - name: 生成 Xcode 工程（XcodeGen）
+        working-directory: apps/android/kuikly/iosApp
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: 装渲染器依赖（CocoaPods）
+        working-directory: apps/android/kuikly/iosApp
+        run: pod install --repo-update
+
+      - name: 编译模拟器包
+        working-directory: apps/android/kuikly/iosApp
+        run: |
+          set -o pipefail
+          # ⚠ 必须只编 arm64：iOS 模拟器默认会同时要 x86_64，而 Kotlin 侧只产出
+          #   iosSimulatorArm64 的 framework（实测报 "found architecture 'arm64',
+          #   required architecture 'x86_64'" 然后链接失败）
+          xcodebuild \
+            -workspace iosApp.xcworkspace \
+            -scheme iosApp \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=NO \
+            EXCLUDED_ARCHS=x86_64 \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: 打包 .app 供下载
+        working-directory: apps/android/kuikly/iosApp
+        run: |
+          APP=$(find build/Build/Products/Debug-iphonesimulator -maxdepth 1 -name '*.app' | head -1)
+          echo "产物: $APP"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" iosApp-simulator.zip
+          ls -lah iosApp-simulator.zip
+
+      # 这台 runner 本身就是 macOS，模拟器能真跑 —— 把界面截下来传回去，
+      # 让「看不到界面」不再依赖用户手里的设备。
+      - name: 启动模拟器并截图
+        if: always()
+        continue-on-error: true
+        working-directory: apps/android/kuikly/iosApp
+        run: |
+          set +e
+          mkdir -p shots
+          DEV=$(xcrun simctl list devices available | grep -m1 "iPhone" | sed -n 's/.*(\([0-9A-F-]\{36\}\)).*/\1/p')
+          echo "模拟器 UDID: $DEV"
+          if [ -z "$DEV" ]; then echo "没有可用模拟器，跳过"; exit 0; fi
+          xcrun simctl boot "$DEV" 2>/dev/null
+          xcrun simctl bootstatus "$DEV" -b 2>/dev/null
+          xcrun simctl status_bar "$DEV" override --time "9:41" --batteryState charged --batteryLevel 100 2>/dev/null
+          APP=$(find build/Build/Products/Debug-iphonesimulator -maxdepth 1 -name '*.app' | head -1)
+          echo "安装: $APP"
+          xcrun simctl install "$DEV" "$APP" 2>&1 | tail -5
+          # 预置自动进入开关：模拟器里没有指针，开屏的「点击进入」点不了。
+          # 键名带 PlatformIos 的 xlr-k-llm. 前缀。App 正常启动时读到 "1" 就自己走进主界面。
+          xcrun simctl spawn "$DEV" defaults write cn.guatai.xiaoliuren.ios "xlr-k-llm.xlr-autotest" "1" 2>&1 | tail -2
+          # 跳过 8 步配置引导（GuideData.kt 的 GUIDE_KEY = "xlr-onboarded-2"），
+          # 否则截到的是引导卡，看不到主界面和资源图
+          xcrun simctl spawn "$DEV" defaults write cn.guatai.xiaoliuren.ios "xlr-k-llm.xlr-onboarded-2" "skip" 2>&1 | tail -2
+          # 雾档开到二档 + 切黑夜皮肤：
+          # 只有 fogLevel == 2 才走 XLRRealtimeFog（Metal 实时雾那套），
+          # 不预设的话截图里看到的永远是一档的 PNG 雾，等于没验到新代码；
+          # 黑夜是深色皮肤，顺便验证状态栏文字有没有跟着变白。
+          xcrun simctl spawn "$DEV" defaults write cn.guatai.xiaoliuren.ios "xlr-k-llm.K_FOG_LEVEL" "2" 2>&1 | tail -2
+          xcrun simctl spawn "$DEV" defaults write cn.guatai.xiaoliuren.ios "xlr-k-llm.K_SKIN" "hei" 2>&1 | tail -2
+          xcrun simctl spawn "$DEV" defaults read cn.guatai.xiaoliuren.ios 2>&1 | head -10
+          echo "启动:"
+          xcrun simctl launch "$DEV" cn.guatai.xiaoliuren.ios 2>&1 | tail -3
+          sleep 7
+          xcrun simctl io "$DEV" screenshot shots/01-launch.png 2>&1 | tail -2
+          sleep 5
+          xcrun simctl io "$DEV" screenshot shots/02-after.png 2>&1 | tail -2
+          sleep 6
+          xcrun simctl io "$DEV" screenshot shots/03-later.png 2>&1 | tail -2
+          xcrun simctl spawn "$DEV" log show --last 60s --predicate 'process == "iosApp"' > shots/app.log 2>/dev/null
+          echo "=== App 日志（前 60 行）==="
+          head -60 shots/app.log 2>/dev/null
+          echo "=== 截图 ==="
+          ls -lah shots/
+
+      - name: 上传模拟器包与截图
+        uses: actions/upload-artifact@v4
+        with:
+          name: iosApp-simulator
+          path: |
+            apps/android/kuikly/iosApp/iosApp-simulator.zip
+            apps/android/kuikly/iosApp/shots/
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ------------------------------------------------------------------ 未签名 ipa（实机）
+  ipa:
+    runs-on: macos-26
+    timeout-minutes: 90
+
+    steps:
+      - name: 取代码
+        uses: actions/checkout@v4
+
+      - name: 装 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 缓存 Gradle / Kotlin/Native
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.konan
+          key: konan-${{ runner.os }}-${{ hashFiles('apps/android/kuikly/gradle/wrapper/gradle-wrapper.properties', 'apps/android/kuikly/build.gradle.kts', 'apps/android/kuikly/shared/build.gradle.kts') }}
+          restore-keys: |
+            konan-${{ runner.os }}-
+
+      - name: 选镜像里最新的 Xcode
+        run: |
+          ls /Applications | grep -i '^Xcode' || true
+          newest=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "用 $newest"
+          sudo xcode-select -s "$newest"
+          xcodebuild -version
+      - name: 缓存 framework 产物（只改 Swift 时可跳过重编）
+        uses: actions/cache@v4
+        with:
+          # 只缓存「Kotlin 侧没变时能复用」的编译产物；key 带 src 全量哈希，
+          # 资源/代码一变 key 就变，不会拿到早期产物。
+          path: |
+            apps/android/kuikly/.gradle
+            apps/android/kuikly/build
+            apps/android/kuikly/shared/build
+            apps/android/kuikly/androidApp/build
+          key: kbuild-${{ runner.os }}-${{ hashFiles('apps/android/kuikly/shared/src/**', 'apps/android/kuikly/**/*.kts', 'apps/android/kuikly/gradle/wrapper/gradle-wrapper.properties') }}
+      - name: 编业务 framework（shared · 实机 arm64 · release）
+        working-directory: apps/android/kuikly
+        run: |
+          chmod +x gradlew
+          ./gradlew :shared:linkReleaseFrameworkIosArm64 --no-daemon --stacktrace
+
+      - name: 拷 framework + 安卓资源进壳工程
+        working-directory: apps/android/kuikly
+        run: |
+          mkdir -p iosApp/Frameworks
+          rm -rf iosApp/Frameworks/shared.framework
+          cp -R shared/build/bin/iosArm64/releaseFramework/shared.framework iosApp/Frameworks/
+          rm -rf iosApp/Assets && mkdir -p iosApp/Assets
+          cp -R androidApp/src/main/assets/. iosApp/Assets/
+
+      - name: 生成 Xcode 工程（XcodeGen）
+        working-directory: apps/android/kuikly/iosApp
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+
+      - name: 装渲染器依赖（CocoaPods）
+        working-directory: apps/android/kuikly/iosApp
+        run: pod install --repo-update
+
+      - name: 编译实机包（不签名）
+        working-directory: apps/android/kuikly/iosApp
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -workspace iosApp.xcworkspace \
+            -scheme iosApp \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build-ipa \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            build
+
+      - name: 组装未签名 ipa
+        working-directory: apps/android/kuikly/iosApp
+        run: |
+          APP=$(find build-ipa/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' | head -1)
+          echo "产物: $APP"
+          rm -rf Payload "iosApp-unsigned.ipa"
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qry "iosApp-unsigned.ipa" Payload
+          ls -lah "iosApp-unsigned.ipa"
+          echo "—— 这是免签名的 ipa，装实机前要用 Sideloadly / AltStore 拿自己的 Apple ID 重签 ——"
+
+      - name: 上传 ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: iosApp-unsigned-ipa
+          path: apps/android/kuikly/iosApp/iosApp-unsigned.ipa
+          retention-days: 14

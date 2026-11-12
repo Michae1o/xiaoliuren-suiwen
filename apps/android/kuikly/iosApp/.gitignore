@@ -1,0 +1,18 @@
+# Xcode / CocoaPods 生成物 —— 一律不入库，靠 project.yml + Podfile 现场生成
+*.xcodeproj
+*.xcworkspace
+Pods/
+Podfile.lock
+build/
+build-ipa/
+DerivedData/
+Frameworks/
+
+# Kotlin framework 由 gradle 产出后拷进来，不入库
+Frameworks/shared.framework
+
+# 安卓 assets 的副本（CI 从 androidApp/src/main/assets 拷过来）—— 源文件已在库里，副本不入库
+Assets/*
+!Assets/.gitkeep
+
+.DS_Store

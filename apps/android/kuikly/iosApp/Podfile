@@ -1,0 +1,26 @@
+# 道家小六壬 · 卦台 — iOS 壳
+#
+# 业务逻辑 framework（shared）由 gradle 产出后直接链接进 app，不走 CocoaPods：
+# 这样 Windows 上的安卓构建完全不受影响，CI 上也只有一条明确的编译路径。
+# 这里只装 Kuikly 的 iOS 渲染器本体，版本必须和 shared/build.gradle.kts 的 kuiklyVersion 对齐
+# （2.30.0-2.1.21 → 2.30.0）。
+
+source 'https://cdn.cocoapods.org/'
+
+platform :ios, '15.0'
+
+target 'iosApp' do
+  inhibit_all_warnings!
+
+  pod 'OpenKuiklyIOSRender', '2.30.0'
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['ENABLE_BITCODE'] = 'NO'
+      # Xcode 27 起 SDK 最低部署目标是 15.0，Pods 里的老配置要一起抬上来，否则 pod 编不过
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+    end
+  end
+end

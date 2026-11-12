@@ -1,0 +1,68 @@
+# XcodeGen 工程描述 —— .xcodeproj 不手搓、也不入库，由 CI（或任意 Mac）执行
+#   xcodegen generate
+# 生成。这样改工程结构只是改这个文件，Windows 上也能编辑。
+#
+# shared.framework（Kotlin 业务代码）由 gradle 产出后由 workflow 拷到 iosApp/Frameworks/。
+
+name: iosApp
+
+options:
+  bundleIdPrefix: cn.guatai
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    ENABLE_BITCODE: NO
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+
+targets:
+  iosApp:
+    type: application
+    platform: iOS
+
+    sources:
+      - path: iosApp
+        excludes:
+          - "Info.plist"
+          # 隐私清单要单独作为 resource 加，不能跟着源码目录一起被收（会重复引用）
+          - "PrivacyInfo.xcprivacy"
+      # 安卓的 assets 原样拷进来（保持 common/、splash-orbit/、splash-stars-*.png 的相对路径）。
+      # 由 CI 从 androidApp/src/main/assets 复制到 iosApp/Assets，folder reference 整体打进 bundle，
+      # 这样 Kuikly 侧按 "assets://common/xxx.png" 找图时路径能和安卓完全一致。
+      - path: Assets
+        type: folder
+      # 苹果要求的隐私清单（声明用了 NSUserDefaults）
+      - path: iosApp/PrivacyInfo.xcprivacy
+        buildPhase: resources
+
+    dependencies:
+      # 静态 framework：直接链进主二进制（embed: false），和官方 pod 静态集成等价
+      - framework: Frameworks/shared.framework
+        embed: false
+        link: true
+      # 实时雾（XLRRealtimeFog.m + FogShader.metal）要用 Metal
+      - sdk: Metal.framework
+      - sdk: MetalKit.framework
+
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cn.guatai.xiaoliuren.ios
+        INFOPLIST_FILE: iosApp/Info.plist
+        SWIFT_OBJC_BRIDGING_HEADER: iosApp/Bridging-Header.h
+        TARGETED_DEVICE_FAMILY: "1"
+        FRAMEWORK_SEARCH_PATHS:
+          - $(inherited)
+          - $(PROJECT_DIR)/Frameworks
+        # Kuikly 渲染器用类别扩展 UIKit 类，静态链接时必须带 -ObjC，否则那些类别不会被加载
+        OTHER_LDFLAGS:
+          - $(inherited)
+          - -ObjC
+        ENABLE_USER_SCRIPT_SANDBOXING: "NO"
+
+    scheme:
+      testTargets: []
+      gatherCoverageData: false

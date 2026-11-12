@@ -1,0 +1,2 @@
+# 这个目录由 CI 从 androidApp/src/main/assets 复制进来（不入库）
+# 保留它存在，是为了让 xcodegen 在没拷资源时也能生成工程
