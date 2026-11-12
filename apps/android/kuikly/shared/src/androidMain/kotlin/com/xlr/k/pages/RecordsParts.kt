@@ -121,6 +121,14 @@ internal fun RecordsOverlay() {
     val rowY = remember { mutableStateMapOf<String, Float>() }
     val dens = LocalDensity.current
     val delW = with(dens) { 76.dp.toPx() }
+    /* 拉过头：越拖越沉（over*0.30/(1+over/80)），最多再多走一小截 */
+    val softPx = with(dens) { 80.dp.toPx() }
+    fun rubberDx(raw: Float): Float {
+        if (raw >= 0f) return 0f
+        if (raw >= -delW) return raw
+        val over = -raw - delW
+        return -(delW + over * 0.30f / (1f + over / softPx))
+    }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     /* 松手：用 easeOutBack 滑到终点（先冲过头一点再回来，Q 弹），不是线性也不是直接吸附 */
@@ -182,10 +190,10 @@ internal fun RecordsOverlay() {
                 .pointerInput(Unit) {
                     var activeId = ""
                     /* ★
-                       行的左滑先露「删除」（-delW 拉满）；继续左拉的超量算成「收抽屉」，
-                       直接写 Session.recProg 跟手（拖多少退多少），松手按进度吸附。
-                       起手不在任何一行（页签/空白）时，左滑同样收抽屉。 */
+                       行的左滑只负责露「删除」（-delW 拉满就停，不带动抽屉）。
+                       起手不在任何一行（页签/空白）时，左滑才收抽屉。 */
                     var closeDx = 0f
+                    var rawDx = 0f
                     val driveClose: () -> Unit = {
                         val w = if (panelW > 0f) panelW else 1f
                         Session.recDragging = true
@@ -219,6 +227,7 @@ internal fun RecordsOverlay() {
                             activeId = if (near) best else ""
                             if (activeId != "") {
                                 if (swId != activeId) { swId = activeId; swDx = 0f }
+                                rawDx = swDx
                                 menuId = ""
                             }
                         },
@@ -248,16 +257,8 @@ internal fun RecordsOverlay() {
                         },
                         onHorizontalDrag = { _, amount ->
                             if (activeId != "") {
-                                val next = swDx + amount
-                                if (next < -delW) {
-                                    /* 删除已拉满：超出的部分驱动抽屉跟手退回 */
-                                    swDx = -delW
-                                    closeDx = (closeDx - (next + delW)).coerceAtLeast(0f)
-                                    driveClose()
-                                } else {
-                                    closeDx = 0f
-                                    swDx = next.coerceIn(-delW, 0f)
-                                }
+                                rawDx = (rawDx + amount).coerceAtMost(0f)
+                                swDx = rubberDx(rawDx)
                             } else {
                                 /* 空白/页签/空隙起手：左滑直接收抽屉 */
                                 closeDx = (closeDx - amount).coerceAtLeast(0f)

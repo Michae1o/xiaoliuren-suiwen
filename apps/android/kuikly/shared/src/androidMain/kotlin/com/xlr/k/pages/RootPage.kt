@@ -298,7 +298,7 @@ private fun RootScreen() {
                 detectHorizontalDragGestures(
                     onDragStart = {
                         blocked = Session.recordsOpen || Session.settingsOpen ||
-                            Session.guideOn || Session.skinMenuOpen
+                            Session.guideOn || Session.skinMenuOpen || Session.splashOn
                         drawerMode = false
                         drawerAcc = 0f
                         dirDecided = false
