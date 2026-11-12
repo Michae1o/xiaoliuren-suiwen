@@ -10,6 +10,14 @@ on:
       tag:
         description: '要挂到哪个 Release（已存在的 tag 名）'
         required: true
+      which:
+        description: '编哪几个'
+        type: choice
+        options:
+          - all
+          - windows
+          - android
+        default: all
 
 permissions:
   contents: write
@@ -17,6 +25,7 @@ permissions:
 jobs:
   windows:
     name: Windows 便携包
+    if: inputs.which == 'all' || inputs.which == 'windows'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +73,7 @@ jobs:
 
   android:
     name: 安卓 APK
+    if: inputs.which == 'all' || inputs.which == 'android'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -95,7 +105,9 @@ jobs:
 
       - name: 编 APK（仓里没钥匙，用调试签名）
         working-directory: apps/android/kuikly
-        run: ./gradlew :androidApp:assembleRelease --console=plain --no-daemon
+        run: |
+          chmod +x gradlew
+          ./gradlew :androidApp:assembleRelease --console=plain --no-daemon
 
       - name: 改名
         run: |
