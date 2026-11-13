@@ -181,3 +181,19 @@ html[data-skin="xuan"] #q:focus {
   background-color: transparent !important;
   border-color: transparent !important;
 }
+
+/* ══ 2026-11-13══
+   要的口径：问事区(#q) 与 背景区(#bg) **任何皮肤、任何状态都不显示文本框** ——
+   无底色、无边框、无内外阴影（含聚焦环），只剩字与光标。
+   之前只给宣纸做了半套（只覆盖 #q、且聚焦时 box-shadow 没清），铜古反而铺了一块
+   rgba(197,192,179,.70) 的底 + 聚焦金环 ⇒ 看着就是「一个对话框」。这次一次收口：
+   这一条管所有皮肤（铜古那份在 tonggu.css 里同步改了，它优先级更高，两处都得对）。 */
+html body #q, html body #bg,
+html body #q:hover, html body #bg:hover,
+html body #q:focus, html body #bg:focus {
+  background-color: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}

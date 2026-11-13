@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 系统启动画面（Android 12+）用的透明图标：只保留黑色夜空底，不显示任何图形。 -->
+<!-- 系统启动画面（Android 12+）用的透明图标：只保留黑色夜空底，不显示任何图形。
+     原来的应用图标（太极球）就是从这里冒出来的；按当时的决定，开屏不显示它。
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <solid android:color="#00000000" />

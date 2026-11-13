@@ -1,6 +1,6 @@
 /* corpus.js —— 由 tools/gen-corpus.mjs 从 corpus/*.md 生成。
  * 这就是判据的真源：解卦提示词（prompt.js）与依据页都从这里取。
- * 生成时间：2026-11-12，共 9 份。
+ * 生成时间：2026-11-13，共 9 份。
  */
 export const CORPUS = [
  {

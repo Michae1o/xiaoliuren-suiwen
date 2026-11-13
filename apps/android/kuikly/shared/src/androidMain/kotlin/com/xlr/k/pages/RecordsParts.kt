@@ -121,7 +121,7 @@ internal fun RecordsOverlay() {
     val rowY = remember { mutableStateMapOf<String, Float>() }
     val dens = LocalDensity.current
     val delW = with(dens) { 76.dp.toPx() }
-    /* 拉过头：越拖越沉（over*0.30/(1+over/80)），最多再多走一小截 */
+    /* 拉过头：越拖越沉（同 iOS 的 rubber：over*0.30/(1+over/80)），最多再多走一小截 */
     val softPx = with(dens) { 80.dp.toPx() }
     fun rubberDx(raw: Float): Float {
         if (raw >= 0f) return 0f
