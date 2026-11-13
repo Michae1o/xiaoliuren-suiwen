@@ -153,7 +153,7 @@ internal fun askFollow(ctx: Context, B: List<Block>, scope: kotlinx.coroutines.C
 
 /* 叁页里那一块（样式按 tailwind.css 那套；它是「单独一个模块」，所以自己有边/底/内距） */
 @Composable
-internal fun FollowPane(ctx: Context, B: List<Block>, modifier: Modifier = Modifier) {
+internal fun FollowPane(ctx: Context, B: List<Block>, modifier: Modifier = Modifier, active: Boolean = true) {
     val scope = rememberCoroutineScope()
     Column(
         modifier = modifier
@@ -169,21 +169,23 @@ internal fun FollowPane(ctx: Context, B: List<Block>, modifier: Modifier = Modif
                 if (idx > 0) {
                     Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(KY_LINE))
                 }
-                Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
-                        Text_(text = "问 · ", fontSize = 13f, lineHeight = 21f, color = KY_DIM2)
-                        Text_(
-                            text = it.first,
-                            fontSize = 13f,
-                            lineHeight = 21f,
-                            weight = 600,
-                            color = KY_INK,
-                        )
-                    }
-                    if (it.second.isEmpty()) {
-                        SmallCursor()
-                    } else {
-                        RichText_(text = it.second, fontSize = 13f, color = KY_INK, lineHeight = 22.75f)
+                SelectableCardText(textKey = listOf(Session.castSeq, idx, it, active, Session.recordsOpen, Session.settingsOpen)) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+                            Text_(text = "问 · ", fontSize = 13f, lineHeight = 21f, color = KY_DIM2)
+                            Text_(
+                                text = it.first,
+                                fontSize = 13f,
+                                lineHeight = 21f,
+                                weight = 600,
+                                color = KY_INK,
+                            )
+                        }
+                        if (it.second.isEmpty()) {
+                            SmallCursor()
+                        } else {
+                            RichText_(text = it.second, fontSize = 13f, color = KY_INK, lineHeight = 22.75f)
+                        }
                     }
                 }
             }

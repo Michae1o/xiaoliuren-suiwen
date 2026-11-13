@@ -54,7 +54,7 @@ internal fun RvArea(r: Rec, onChange: () -> Unit, onRuleWritten: () -> Unit = {}
     val miss = LlmStore.missing(LlmStore.load())
 
     if (rv.isNotEmpty()) {
-        Text_(text = rv, fontSize = 12.5f, lineHeight = 22f, color = KY_INK)
+        SelectableCardText(textKey = listOf(id, rv, Session.recordsOpen)) { Text_(text = rv, fontSize = 12.5f, lineHeight = 22f, color = KY_INK) }
         Spacer(modifier = Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             /* 旧 Records.jsx L203-205：写入准则 / 算了，不记 ＋ 一句 mini 说明；
@@ -93,7 +93,7 @@ internal fun RvArea(r: Rec, onChange: () -> Unit, onRuleWritten: () -> Unit = {}
     }
 
     if (live.isNotEmpty()) {
-        Text_(text = live, fontSize = 12.5f, lineHeight = 22f, color = KY_INK)
+        SelectableCardText(textKey = listOf(id, live, Session.recordsOpen)) { Text_(text = live, fontSize = 12.5f, lineHeight = 22f, color = KY_INK) }
         Spacer(modifier = Modifier.height(6.dp))
     }
     if (busy) {
@@ -226,13 +226,15 @@ internal fun FollowAsk(r: Rec, onChange: () -> Unit) {
         Spacer(modifier = Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
             Text_(text = "问 · ", fontSize = 12.5f, lineHeight = 21f, color = KY_DIM2)
-            Text_(text = pendingQ, fontSize = 12.5f, lineHeight = 21f, weight = 500)
+            SelectableCardText(textKey = listOf(id, pendingQ, Session.recordsOpen)) {
+                Text_(text = pendingQ, fontSize = 12.5f, lineHeight = 21f, weight = 500)
+            }
         }
         Spacer(modifier = Modifier.height(3.dp))
         if (pendingA.isEmpty()) {
             ThreeDots(KY_DIM2)
         } else {
-            Text_(text = pendingA, fontSize = 12f, lineHeight = 20f, color = KY_DIM)
+            SelectableCardText(textKey = listOf(id, pendingA, Session.recordsOpen)) { Text_(text = pendingA, fontSize = 12f, lineHeight = 20f, color = KY_DIM) }
         }
         Spacer(modifier = Modifier.height(9.dp))
     }

@@ -284,6 +284,7 @@ internal fun JieContent(active: Boolean = true, onNewCast: () -> Unit = {}) {
                 FollowPane(ctx, blocks, active = active)
             }
         }
+        
         item {
             Spacer(modifier = Modifier.height(20.dp))
             /* 「断卦依据」在卡外，它的表头高度决定断辞卡的上限（早期版本是 JS 量完写 --xlr-jie-h）。

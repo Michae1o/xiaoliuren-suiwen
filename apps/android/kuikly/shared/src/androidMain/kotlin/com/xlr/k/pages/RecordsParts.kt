@@ -187,7 +187,8 @@ internal fun RecordsOverlay() {
                 .tapSwallow { menuId = "" }
                 /* 左滑删除：手势挂在**面板**这层（行内那层收不到拖动，只到点击），
                    起手按 y 认最近的一行；松手 easeOutBack 弹到位 */
-                .pointerInput(Unit) {
+                .pointerInput(CardSelection.active) {
+                    if (CardSelection.active) return@pointerInput
                     var activeId = ""
                     /* ★
                        行的左滑只负责露「删除」（-delW 拉满就停，不带动抽屉）。
@@ -201,6 +202,7 @@ internal fun RecordsOverlay() {
                     }
                     detectHorizontalDragGestures(
                         onDragStart = { off ->
+                            if (CardSelection.active) return@detectHorizontalDragGestures
                             closeDx = 0f
                             val yy = off.y
                             val rowH = with(dens) { 64.dp.toPx() }
@@ -232,6 +234,7 @@ internal fun RecordsOverlay() {
                             }
                         },
                         onDragEnd = {
+                            if (CardSelection.active) return@detectHorizontalDragGestures
                             if (closeDx > 0f || Session.recProg < 0.999f) {
                                 Session.recDragging = false
                                 if (Session.recProg < 0.68f) {
@@ -246,6 +249,7 @@ internal fun RecordsOverlay() {
                             closeDx = 0f
                         },
                         onDragCancel = {
+                            if (CardSelection.active) return@detectHorizontalDragGestures
                             Session.recDragging = false
                             if (Session.recProg < 0.999f) {
                                 if (Session.recProg < 0.68f) { swDx = 0f; swId = ""; RecDrawer.close(scope) }
@@ -256,6 +260,7 @@ internal fun RecordsOverlay() {
                             closeDx = 0f
                         },
                         onHorizontalDrag = { _, amount ->
+                            if (CardSelection.active) return@detectHorizontalDragGestures
                             if (activeId != "") {
                                 rawDx = (rawDx + amount).coerceAtMost(0f)
                                 swDx = rubberDx(rawDx)
@@ -762,6 +767,8 @@ private fun RecDetail(r: Rec, onChange: () -> Unit, onBack: () -> Unit, onRuleWr
         LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
             item {
                 Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                    SelectableCardText(textKey = listOf(r, Session.recordsOpen)) {
+                        Column {
                     SecLabel("所问")
                     Text_(text = r["q"] ?: "", fontSize = 13.5f, lineHeight = 23f)
                     val bg = r["bg"] ?: ""
@@ -805,6 +812,9 @@ private fun RecDetail(r: Rec, onChange: () -> Unit, onBack: () -> Unit, onRuleWr
                             Spacer(modifier = Modifier.height(3.dp))
                             Text_(text = it2.second, fontSize = 12f, lineHeight = 20f, color = KY_DIM)
                             Spacer(modifier = Modifier.height(9.dp))
+                        }
+                    }
+
                         }
                     }
 

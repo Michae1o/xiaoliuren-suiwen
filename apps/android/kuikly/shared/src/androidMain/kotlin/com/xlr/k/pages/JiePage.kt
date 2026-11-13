@@ -190,6 +190,7 @@ internal fun JieContent(active: Boolean = true, onNewCast: () -> Unit = {}) {
                             if (h > 0 && h != bodyPx) bodyPx = h
                         }
                 ) {
+                    SelectableCardText(textKey = listOf(answer.ifEmpty { quick }, active, Session.recordsOpen, Session.settingsOpen)) {
                     LazyColumn(
                         state = lst,
                         modifier = Modifier
@@ -203,6 +204,7 @@ internal fun JieContent(active: Boolean = true, onNewCast: () -> Unit = {}) {
                             if (Session.askBusy) BlinkCursor()
                             Spacer(modifier = Modifier.height(12.dp))
                         }
+                    }
                     }
                     /* 滚动条：跟手、停 1 秒淡出（独立小块，只它自己重组） */
                     ScrollHint(lst, bodyPx, density, Modifier.align(Alignment.TopEnd))
@@ -238,7 +240,7 @@ internal fun JieContent(active: Boolean = true, onNewCast: () -> Unit = {}) {
         if (Session.followReady) {
             item {
                 Spacer(modifier = Modifier.height(20.dp))
-                FollowPane(ctx, blocks)
+                FollowPane(ctx, blocks, active = active)
             }
         }
         

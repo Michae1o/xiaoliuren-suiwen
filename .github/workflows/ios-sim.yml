@@ -2,7 +2,7 @@ name: iOS 构建（模拟器包 + 未签名 ipa）
 
 # 目的：在 Windows 上开发，把「编 iOS」交给 GitHub 的 macOS runner。
 #   · simulator job → 免签名的 .app，装进模拟器就能看界面
-#   · ipa job      → 免签名的真机 .ipa（用 Sideloadly / AltStore 拿自己的 Apple ID 自签后装 iPhone，
+#   · ipa job      → 免签名的实机 .ipa（用 Sideloadly / AltStore 拿自己的 Apple ID 自签后装 iPhone，
 #                     7 天有效；不需要 688 的开发者年费）
 #
 # 免费额度：公开仓库的 macOS runner 不计费；私有仓库按 ×10 计分钟（每月 2000 → 实跑约 200 分钟）。
@@ -24,7 +24,7 @@ concurrency:
 jobs:
 
   # ------------------------------------------------------------------ 模拟器包
-  # ⚠ 这个 job 现在是「附加项」：真机 ipa 成功就够了，模拟器包链接失败不会让整轮变红
+  # ⚠ 这个 job 现在是「附加项」：实机 ipa 成功就够了，模拟器包链接失败不会让整轮变红
   #   （第四轮实测：ipa 全绿，但 simulator 在 xcodebuild 链接阶段报 clang error；
   #    没有 Mac 的情况下模拟器包也没人用，先不阻塞主流程。）
   simulator:
@@ -71,7 +71,7 @@ jobs:
         uses: actions/cache@v4
         with:
           # 只缓存「Kotlin 侧没变时能复用」的编译产物；key 里带 src 全量哈希，
-          # 资源/代码一变 key 就变，不会拿到旧产物。
+          # 资源/代码一变 key 就变，不会拿到早期产物。
           path: |
             apps/android/kuikly/.gradle
             apps/android/kuikly/build
@@ -155,19 +155,19 @@ jobs:
           xcrun simctl install "$DEV" "$APP" 2>&1 | tail -5
           # 预置自动进入开关：模拟器里没有指针，开屏的「点击进入」点不了。
           # 键名带 PlatformIos 的 xlr-k-llm. 前缀。App 正常启动时读到 "1" 就自己走进主界面。
-          xcrun simctl spawn "$DEV" defaults write cn.luoshen.xiaoliuren.ios "xlr-k-llm.xlr-autotest" "1" 2>&1 | tail -2
+          xcrun simctl spawn "$DEV" defaults write cn.guatai.xiaoliuren.ios "xlr-k-llm.xlr-autotest" "1" 2>&1 | tail -2
           # 跳过 8 步配置引导（GuideData.kt 的 GUIDE_KEY = "xlr-onboarded-2"），
           # 否则截到的是引导卡，看不到主界面和资源图
-          xcrun simctl spawn "$DEV" defaults write cn.luoshen.xiaoliuren.ios "xlr-k-llm.xlr-onboarded-2" "skip" 2>&1 | tail -2
+          xcrun simctl spawn "$DEV" defaults write cn.guatai.xiaoliuren.ios "xlr-k-llm.xlr-onboarded-2" "skip" 2>&1 | tail -2
           # 雾档开到二档 + 切黑夜皮肤：
           # 只有 fogLevel == 2 才走 XLRRealtimeFog（Metal 实时雾那套），
           # 不预设的话截图里看到的永远是一档的 PNG 雾，等于没验到新代码；
           # 黑夜是深色皮肤，顺便验证状态栏文字有没有跟着变白。
-          xcrun simctl spawn "$DEV" defaults write cn.luoshen.xiaoliuren.ios "xlr-k-llm.K_FOG_LEVEL" "2" 2>&1 | tail -2
-          xcrun simctl spawn "$DEV" defaults write cn.luoshen.xiaoliuren.ios "xlr-k-llm.K_SKIN" "hei" 2>&1 | tail -2
-          xcrun simctl spawn "$DEV" defaults read cn.luoshen.xiaoliuren.ios 2>&1 | head -10
+          xcrun simctl spawn "$DEV" defaults write cn.guatai.xiaoliuren.ios "xlr-k-llm.K_FOG_LEVEL" "2" 2>&1 | tail -2
+          xcrun simctl spawn "$DEV" defaults write cn.guatai.xiaoliuren.ios "xlr-k-llm.K_SKIN" "hei" 2>&1 | tail -2
+          xcrun simctl spawn "$DEV" defaults read cn.guatai.xiaoliuren.ios 2>&1 | head -10
           echo "启动:"
-          xcrun simctl launch "$DEV" cn.luoshen.xiaoliuren.ios 2>&1 | tail -3
+          xcrun simctl launch "$DEV" cn.guatai.xiaoliuren.ios 2>&1 | tail -3
           sleep 7
           xcrun simctl io "$DEV" screenshot shots/01-launch.png 2>&1 | tail -2
           sleep 5
@@ -190,7 +190,7 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
-  # ------------------------------------------------------------------ 未签名 ipa（真机）
+  # ------------------------------------------------------------------ 未签名 ipa（实机）
   ipa:
     runs-on: macos-26
     timeout-minutes: 90
@@ -227,14 +227,14 @@ jobs:
         uses: actions/cache@v4
         with:
           # 只缓存「Kotlin 侧没变时能复用」的编译产物；key 带 src 全量哈希，
-          # 资源/代码一变 key 就变，不会拿到旧产物。
+          # 资源/代码一变 key 就变，不会拿到早期产物。
           path: |
             apps/android/kuikly/.gradle
             apps/android/kuikly/build
             apps/android/kuikly/shared/build
             apps/android/kuikly/androidApp/build
           key: kbuild-${{ runner.os }}-${{ hashFiles('apps/android/kuikly/shared/src/**', 'apps/android/kuikly/**/*.kts', 'apps/android/kuikly/gradle/wrapper/gradle-wrapper.properties') }}
-      - name: 编业务 framework（shared · 真机 arm64 · release）
+      - name: 编业务 framework（shared · 实机 arm64 · release）
         working-directory: apps/android/kuikly
         run: |
           chmod +x gradlew
@@ -255,34 +255,12 @@ jobs:
           brew install xcodegen
           xcodegen generate
 
-      # ------------------------------------------------------------------ 变体
-      # lite 版：同源、独立包名（可与完整版并存）、不显示「断卦依据」、提示词用 SYS_LITE。
-      # 用**分支名**区分（push 触发的 run 带不了 inputs）：推到 iosbuild-lite 分支就是 lite。
-      - name: 判断变体
-        id: variant
-        run: |
-          if [[ "${{ github.ref_name }}" == *"iosbuild-lite"* ]]; then
-            echo "lite=1" >> "$GITHUB_OUTPUT"
-            echo "bundle=cn.luoshen.xiaoliuren.ios.lite" >> "$GITHUB_OUTPUT"
-            echo "本次：lite 版"
-          else
-            echo "lite=0" >> "$GITHUB_OUTPUT"
-            echo "bundle=cn.luoshen.xiaoliuren.ios" >> "$GITHUB_OUTPUT"
-            echo "本次：完整版"
-          fi
-
-      - name: 变体标记写进 Info.plist
-        working-directory: apps/android/kuikly/iosApp
-        run: |
-          /usr/libexec/PlistBuddy -c "Delete :XLR_LITE" iosApp/Info.plist 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :XLR_LITE string ${{ steps.variant.outputs.lite }}" iosApp/Info.plist
-          /usr/libexec/PlistBuddy -c "Print :XLR_LITE" iosApp/Info.plist
 
       - name: 装渲染器依赖（CocoaPods）
         working-directory: apps/android/kuikly/iosApp
         run: pod install --repo-update
 
-      - name: 编译真机包（不签名）
+      - name: 编译实机包（不签名）
         working-directory: apps/android/kuikly/iosApp
         run: |
           set -o pipefail
@@ -297,7 +275,6 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
-            PRODUCT_BUNDLE_IDENTIFIER="${{ steps.variant.outputs.bundle }}" \
             build
 
       - name: 组装未签名 ipa
@@ -305,18 +282,16 @@ jobs:
         run: |
           APP=$(find build-ipa/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' | head -1)
           echo "产物: $APP"
-          SUF=""
-          if [[ "${{ steps.variant.outputs.lite }}" == "1" ]]; then SUF="-lite"; fi
-          rm -rf Payload "iosApp-unsigned$SUF.ipa"
+          rm -rf Payload "iosApp-unsigned.ipa"
           mkdir -p Payload
           cp -R "$APP" Payload/
-          zip -qry "iosApp-unsigned$SUF.ipa" Payload
-          ls -lah "iosApp-unsigned$SUF.ipa"
-          echo "—— 这是免签名的 ipa，装真机前要用 Sideloadly / AltStore 拿自己的 Apple ID 重签 ——"
+          zip -qry "iosApp-unsigned.ipa" Payload
+          ls -lah "iosApp-unsigned.ipa"
+          echo "—— 这是免签名的 ipa，装实机前要用 Sideloadly / AltStore 拿自己的 Apple ID 重签 ——"
 
       - name: 上传 ipa
         uses: actions/upload-artifact@v4
         with:
-          name: iosApp-unsigned-ipa${{ steps.variant.outputs.lite == '1' && '-lite' || '' }}
-          path: apps/android/kuikly/iosApp/iosApp-unsigned${{ steps.variant.outputs.lite == '1' && '-lite' || '' }}.ipa
+          name: iosApp-unsigned-ipa
+          path: apps/android/kuikly/iosApp/iosApp-unsigned.ipa
           retention-days: 14
