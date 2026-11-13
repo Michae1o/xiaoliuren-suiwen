@@ -101,7 +101,6 @@ object Platform {
     /** 震动反馈：0 = 刻度（页间滑动时八卦名切换那一格），1 = 钝感（打开记录抽屉）。
      *  宿主没实现就静默跳过（⛔ 别在这里判 typeof，直接 invoke 前判 null）。 */
     var haptic: ((Int) -> Unit)? = null
-    
     /** 写一个文件到「下载/道家小六壬/」，返回给用户看的路径（失败 null） */
     var saveFile: ((String, String) -> String?)? = null
     /** 导出时弹系统「保存到…」面板让用户自己挑位置：写完后回调给用户看的文件名，取消/失败 null。

@@ -618,7 +618,10 @@ internal fun RecordsOverlay() {
                                 translationY = (1f - mpNow) * (if (flip) -6f else 6f) * dens.density
                             }
                             .clip(RoundedCornerShape(12.dp))
-                            
+                            /* ★ 这一版「浅色半透 + 白边 + 顶部 rim 高光」就是对的样式
+                               （lite 2.261101.3 上的样子）。它看着"像没有底"是设计意图，⛔ 别再为了"看清面板"
+                               把 popup 的面改成 surface2 / d.bg——试过两次，用户都判"变灰了 / 变实心了"。
+                               区分靠的是那圈白色内描边和边缘高光，不是底色深浅。 */
                             .glassMaterial(RoundedCornerShape(12.dp), popup = true)
                             .padding(vertical = 4.dp)
                     ) {

@@ -104,7 +104,7 @@ internal fun rvUser(rec: Rec): String {
 /** 复盘结果：展示正文 / 依据（进准则用）/ 那一行 RULE（进准则用） */
 internal class RvOut(val show: String, val why: String, val rule: String)
 
-
+/** 体系总纲：复盘与追问都要跑在同一个 SYS 里（lite 包用白话版，口径同主断） */
 private fun sysBase(): String =
     com.xlr.k.judge.SYS
 

@@ -95,7 +95,7 @@ object PlatformIos {
         val info = NSBundle.mainBundle.infoDictionary
         Platform.version = (info?.get("CFBundleShortVersionString") as? String) ?: "1.0"
         Platform.versionCode = (info?.get("CFBundleVersion") as? String)?.toIntOrNull() ?: 1
-        Platform.pkgName = (info?.get("CFBundleIdentifier") as? String) ?: "cn.guatai.xiaoliuren.ios"
+        Platform.pkgName = (info?.get("CFBundleIdentifier") as? String) ?: "cn.luoshen.xiaoliuren.ios"
 
         /* 共享层拿这两个值把「设计坐标」换算成物理像素（手势/布局要用），
            和安卓那边给的口径一致：物理像素，不是点。
@@ -121,7 +121,6 @@ object PlatformIos {
         Platform.onBack = null
         Platform.exitApp = null
 
-        
     }
 
     // ---------------------------------------------------------------- 网络
