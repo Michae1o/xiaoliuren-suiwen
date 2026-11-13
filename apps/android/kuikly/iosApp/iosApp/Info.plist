@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.261113.11</string>
+	<string>1.261113.12</string>
 	<key>CFBundleVersion</key>
-	<string>12611141</string>
+	<string>12611142</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<!-- 让用户能在 iPhone 的「文件」App → 我的 iPhone → 卦台 里直接看到导出/备份的文件，
