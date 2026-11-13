@@ -284,8 +284,7 @@ internal fun JieContent(active: Boolean = true, onNewCast: () -> Unit = {}) {
                 FollowPane(ctx, blocks, active = active)
             }
         }
-        /* lite 包**不显示**「断卦依据」（口径照桌面 lite：不带判据面板，解卦走白话版提示词） */
-        if (!Platform.lite) item {
+        item {
             Spacer(modifier = Modifier.height(20.dp))
             /* 「断卦依据」在卡外，它的表头高度决定断辞卡的上限（早期版本是 JS 量完写 --xlr-jie-h）。
                ⚠ 量的是**表头**那一行，不是整张卡：展开后卡片会长到几千 px，量整张会把断辞卡压成一条。 */
