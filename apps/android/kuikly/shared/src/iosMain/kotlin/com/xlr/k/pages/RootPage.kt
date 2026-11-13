@@ -306,7 +306,12 @@ private fun RootScreen() {
                 }
             }
             .pointerInput(CardSelection.active) {
-                    if (CardSelection.active) return@pointerInput
+                    /* ★ 选区还在时，一次横向拖动 = 收掉选区（第二下才翻页／拉抽屉）。
+                       原来这里直接 return，页面像被钉死 —— 现象：「选择器出来一次就再也滑不动」。 */
+                    if (CardSelection.active) {
+                        detectHorizontalDragGestures(onDragStart = { CardSelection.cancel() }) { _, _ -> }
+                        return@pointerInput
+                    }
                 /* ⚠ 这些标记必须活在 pointerInput 的协程里、跨手势记住：
                    原来只在 onDragStart 里 `return@detectHorizontalDragGestures`，只是**退出了那个回调**，
                    拖动照样继续走 onHorizontalDrag —— 于是在设置页/抽屉打开时横向一拖，

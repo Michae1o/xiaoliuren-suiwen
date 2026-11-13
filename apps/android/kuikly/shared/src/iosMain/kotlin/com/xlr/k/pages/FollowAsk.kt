@@ -174,24 +174,14 @@ internal fun FollowPane(ctx: Context, B: List<Block>, modifier: Modifier = Modif
                 if (idx > 0) {
                     Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(KY_LINE))
                 }
-                SelectableCardText(textKey = listOf(Session.castSeq, idx, it, active, Session.recordsOpen, Session.settingsOpen)) {
-                    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
-                            Text_(text = "问 · ", fontSize = 13f, lineHeight = 21f, color = KY_DIM2)
-                            Text_(
-                                text = it.first,
-                                fontSize = 13f,
-                                lineHeight = 21f,
-                                weight = 600,
-                                color = KY_INK,
-                            )
-                        }
-                        if (it.second.isEmpty()) {
-                            SmallCursor()
-                        } else {
-                            RichText_(text = it.second, fontSize = 13f, color = KY_INK, lineHeight = 22.75f)
-                        }
-                    }
+                Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp)) {
+                    NativeFollowText(
+                        question = it.first,
+                        answer = it.second,
+                        identity = "follow:${Session.castSeq}:${Session.recId}:$idx",
+                        active = active && !Session.recordsOpen && !Session.settingsOpen,
+                    )
+                    if (it.second.isEmpty()) SmallCursor()
                 }
             }
         }
@@ -325,3 +315,4 @@ private fun SmallCursor() {
     }
     Box(modifier = Modifier.width(2.5.dp).height(14.dp).background(if (on) KY_INK else Color.Transparent))
 }
+

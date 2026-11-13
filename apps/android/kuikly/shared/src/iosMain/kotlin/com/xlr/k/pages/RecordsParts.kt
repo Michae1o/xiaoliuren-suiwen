@@ -236,7 +236,11 @@ internal fun RecordsOverlay() {
                 /* 左滑删除：手势挂在**面板**这层（行内那层收不到拖动，只到点击），
                    起手按 y 认最近的一行；松手 easeOutBack 弹到位 */
                 .pointerInput(CardSelection.active) {
-                    if (CardSelection.active) return@pointerInput
+                    /* ★ 选区还在时，一次横向拖动 = 收掉选区（第二下才收抽屉／左滑删除）。 */
+                    if (CardSelection.active) {
+                        detectHorizontalDragGestures(onDragStart = { CardSelection.cancel() }) { _, _ -> }
+                        return@pointerInput
+                    }
                     var activeId = ""
                     /* ★
                        行的左滑先露「删除」（-delW 拉满）；继续左拉的超量算成「收抽屉」，

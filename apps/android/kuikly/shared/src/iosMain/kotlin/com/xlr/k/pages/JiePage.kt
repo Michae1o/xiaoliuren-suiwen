@@ -6,6 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import com.tencent.kuikly.compose.foundation.gestures.detectVerticalDragGestures
+import com.tencent.kuikly.compose.ui.input.pointer.pointerInput
 import com.tencent.kuikly.compose.foundation.background
 import com.tencent.kuikly.compose.foundation.clickable
 import com.tencent.kuikly.compose.animation.core.Animatable
@@ -178,20 +180,26 @@ internal fun JieContent(active: Boolean = true, onNewCast: () -> Unit = {}) {
     var recapPx by remember { mutableStateOf(0) }
     var btnsPx by remember { mutableStateOf(0) }
     var evidPx by remember { mutableStateOf(56) }
-    var bodyPx by remember { mutableStateOf(0) }
     val density = LocalDensity.current.density
     val availDp = (if (Platform.screenH > 0) Platform.screenH else 2400).toFloat() / density - 115f - 71f
     val cardMaxDp = (availDp - evidPx.toFloat() / density - 20f).coerceAtLeast(280f)
     val bodyCapDp = (cardMaxDp - (recapPx + btnsPx).toFloat() / density - 14f).coerceAtLeast(90f)
 
-    /* 断辞的滚动条状态放在 ScrollHint 自己里面（只重组那一小块，不再每帧重组整个叁页 —— 上一版就是那样才卡） */
-    val lst = rememberLazyListState()
-
     LazyColumn(
+        // UIKit selection-handle drags must not start the outer Compose scroller.
+        userScrollEnabled = !CardSelection.active,
         modifier = Modifier
             .fillMaxSize()
             .padding(start = 44.dp, end = 44.dp, top = 115.dp)
             .padding(bottom = 36.dp)
+            .then(
+                /* ★
+                   选区还在时，一次竖向拖动 = 收掉选区，**不再干等**。
+                   拖选字手柄走的是 UITextView 内部，不经过这里，所以不会误伤。 */
+                if (CardSelection.active) Modifier.pointerInput(Unit) {
+                    detectVerticalDragGestures(onDragStart = { CardSelection.cancel() }) { _, _ -> }
+                } else Modifier
+            )
     ) {
         item {
             val shape = RoundedCornerShape(Skin.rCard)
@@ -216,36 +224,17 @@ internal fun JieContent(active: Boolean = true, onNewCast: () -> Unit = {}) {
                     Platform.copy?.invoke(copyCleanText(ctx, cast, body))
                     Session.say("已复制")
                 }) }
-                /* 断辞正文：卡内自己滚（内容短时它就短，卡片跟着收）+ 右侧墨色滚动条
-                   （早期版本 phoneAnim.js initScrollHint：3px 圆角条、取 --ink、停手 900ms 淡出 ⇒ 这里 1000ms）
-                   ⚠ 用真 Box 画，不用 drawBehind：Kuikly 的 DrawScope 里带 brush 的 drawRoundRect 不落地。 */
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = bodyCapDp.dp)
-                        .onGloballyPositioned {
-                            val h = it.size.height
-                            if (h > 0 && h != bodyPx) bodyPx = h
-                        }
-                ) {
-                    SelectableCardText(textKey = listOf(answer.ifEmpty { quick }, active, Session.recordsOpen, Session.settingsOpen)) {
-                    LazyColumn(
-                        state = lst,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 12.dp)
-                    ) {
-                        items(docBlocks(shown, bigFirst = shownBig)) { b ->
-                            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp)) { DocBlockView(b) }
-                        }
-                        item {
-                            if (Session.askBusy) BlinkCursor()
-                            Spacer(modifier = Modifier.height(12.dp))
-                        }
-                    }
-                    }
-                    /* 滚动条：跟手、停 1 秒淡出（独立小块，只它自己重组） */
-                    ScrollHint(lst, bodyPx, density, Modifier.align(Alignment.TopEnd))
+                /* iOS 正文由只读 UITextView 承载：系统选区/菜单，卡内原生滚动。
+                   顶部 Recap 与底部按钮仍在正文之外，不参与选字。 */
+                Box(modifier = Modifier.fillMaxWidth().heightIn(max = bodyCapDp.dp)) {
+                    NativeDuanciText(
+                        raw = shown,
+                        bigFirst = shownBig,
+                        identity = "duanci:${Session.castSeq}:${Session.recId}",
+                        active = active && !Session.recordsOpen && !Session.settingsOpen,
+                        maxHeight = bodyCapDp,
+                        busy = Session.askBusy,
+                    )
                 }
                 /* 两个按钮 + 状态行 —— 钉卡底，顺手量高度 */
                 Column(
@@ -760,3 +749,4 @@ private fun ScrollHint(state: com.tencent.kuikly.compose.foundation.lazy.LazyLis
             )
     )
 }
+
