@@ -19,6 +19,7 @@ struct DocBlocksView: View {
     let raw: String
     /// 首块要不要立成大字：本机速断 true、模型断辞 false
     var bigFirst: Bool = true
+    var selectable: Bool = false
 
     private enum Blk {
         case h(String)
@@ -66,12 +67,85 @@ struct DocBlocksView: View {
         return out
     }
 
+    @ViewBuilder
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(Self.blocks(raw, bigFirst: bigFirst).enumerated()), id: \.offset) { _, b in
-                blockView(b)
+        if selectable {
+            SelectableBodyText(attributedText: selectableDocument())
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(Self.blocks(raw, bigFirst: bigFirst).enumerated()), id: \.offset) { _, b in
+                    blockView(b)
+                }
             }
         }
+    }
+
+    /// One native text document allows range selection across paragraphs, unlike
+    /// separate SwiftUI Text context menus. Keep the same parser and text styles.
+    private func selectableDocument() -> NSAttributedString {
+        let result = NSMutableAttributedString(string: "")
+        var pendingGap: CGFloat = 0
+        func append(_ text: String, size: CGFloat, color: Color,
+                    weight: UIFont.Weight = .regular, serif: Bool = false,
+                    lineHeight: CGFloat? = nil, before: CGFloat = 0, after: CGFloat = 0,
+                    kern: CGFloat = 0, markdown: Bool = false) {
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.paragraphSpacingBefore = pendingGap + before
+            paragraph.paragraphSpacing = after
+            if let height = lineHeight {
+                paragraph.minimumLineHeight = height
+                paragraph.maximumLineHeight = height
+            }
+            let base = UIFont.systemFont(ofSize: size, weight: weight)
+            let font = serif ? UIFont(descriptor: base.fontDescriptor.withDesign(.serif) ?? base.fontDescriptor, size: size) : base
+            if result.length > 0 { result.append(NSAttributedString(string: "\n")) }
+            let parsed: AttributedString? = markdown ? (try? AttributedString(
+                markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+            )) : nil
+            let visible = parsed.map { String($0.characters) } ?? text
+            let span = NSMutableAttributedString(string: visible, attributes: [
+                .font: font, .foregroundColor: UIColor(color),
+                .paragraphStyle: paragraph, .kern: kern
+            ])
+            if let parsed = parsed {
+                var offset = 0
+                for run in parsed.runs {
+                    let length = String(parsed[run.range].characters).utf16.count
+                    var traits = font.fontDescriptor.symbolicTraits
+                    if run.inlinePresentationIntent?.contains(.stronglyEmphasized) == true { traits.insert(.traitBold) }
+                    if run.inlinePresentationIntent?.contains(.emphasized) == true { traits.insert(.traitItalic) }
+                    if let descriptor = font.fontDescriptor.withSymbolicTraits(traits) {
+                        span.addAttribute(.font, value: UIFont(descriptor: descriptor, size: size),
+                                          range: NSRange(location: offset, length: length))
+                    }
+                    offset += length
+                }
+            }
+            result.append(span)
+            pendingGap = 0
+        }
+        for b in Self.blocks(raw, bigFirst: bigFirst) {
+            switch b {
+            case .gap: pendingGap += 7
+            case .h(let text):
+                append(Self.stripBold(text), size: 13, color: m.ink, weight: .medium, before: 14, after: 4)
+            case .p(let text, let kind):
+                let clean = Self.stripBold(text)
+                if (kind == 1 || kind == 2), let v = Self.verdict(clean) {
+                    append(v.lead, size: 30, color: m.jyc, weight: .medium, serif: true, kern: 1)
+                    result.append(NSAttributedString(string: "（" + v.note + "）", attributes: [
+                        .font: UIFont.systemFont(ofSize: 17), .foregroundColor: UIColor(m.dim2)
+                    ]))
+                    if !v.tail.isEmpty { append(v.tail, size: 13.5, color: m.dim, lineHeight: 26, before: 2, markdown: true) }
+                } else if kind == 1 || kind == 2 {
+                    append(clean, size: kind == 1 || clean.count <= 18 ? 30 : 22,
+                           color: m.jyc, weight: .medium, serif: true, kern: 1)
+                } else {
+                    append(clean, size: 13.5, color: m.dim, lineHeight: 26, markdown: true)
+                }
+            }
+        }
+        return result
     }
 
     @ViewBuilder
@@ -160,5 +234,82 @@ struct DocBlocksView: View {
         return Verdict(lead: Self.stripBold(ns.substring(with: mm.range(at: 2))),
                        note: ns.substring(with: mm.range(at: 3)),
                        tail: Self.stripBold(ns.substring(with: mm.range(at: 5))))
+    }
+}
+
+/// Read-only UIKit text supplies the iOS selection handles (not a copy-all menu).
+/// It expands inside the outer ScrollView instead of introducing nested scrolling.
+struct SelectableBodyText: UIViewRepresentable {
+    let attributedText: NSAttributedString
+
+    init(attributedText: NSAttributedString) { self.attributedText = attributedText }
+
+    init(_ text: String, size: CGFloat, color: Color, spacing: CGFloat = 0,
+         weight: UIFont.Weight = .regular, serif: Bool = false) {
+        let base = UIFont.systemFont(ofSize: size, weight: weight)
+        let font = serif ? UIFont(descriptor: base.fontDescriptor.withDesign(.serif) ?? base.fontDescriptor, size: size) : base
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = spacing
+        attributedText = NSAttributedString(string: text, attributes: [
+            .font: font, .foregroundColor: UIColor(color), .paragraphStyle: paragraph
+        ])
+    }
+
+    func makeUIView(context: Context) -> SelectionTextView {
+        let view = SelectionTextView()
+        view.isEditable = false
+        view.isSelectable = true
+        view.isScrollEnabled = false
+        view.backgroundColor = .clear
+        view.textContainerInset = .zero
+        view.textContainer.lineFragmentPadding = 0
+        view.dataDetectorTypes = []
+        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        view.setContentCompressionResistancePriority(.required, for: .vertical)
+        return view
+    }
+
+    func updateUIView(_ view: SelectionTextView, context: Context) {
+        guard !view.attributedText.isEqual(to: attributedText) else { return }
+        let oldText = view.attributedText.string
+        let selection = view.selectedRange
+        view.attributedText = attributedText
+        // Streaming append/theme updates must not destroy an existing selection.
+        // Replacement content starts unselected; the record view is also keyed by ID.
+        if attributedText.string.hasPrefix(oldText), selection.location != NSNotFound,
+           NSMaxRange(selection) <= attributedText.length {
+            view.selectedRange = selection
+        } else {
+            view.selectedRange = NSRange(location: 0, length: 0)
+        }
+        view.invalidateIntrinsicContentSize()
+    }
+
+    @available(iOS 16.0, *)
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: SelectionTextView, context: Context) -> CGSize? {
+        guard let width = proposal.width, width > 0 else { return nil }
+        return CGSize(width: width, height: ceil(uiView.sizeThatFits(
+            CGSize(width: width, height: .greatestFiniteMagnitude)).height))
+    }
+
+    static func dismantleUIView(_ view: SelectionTextView, coordinator: ()) {
+        view.selectedRange = NSRange(location: 0, length: 0)
+        view.resignFirstResponder()
+    }
+}
+
+final class SelectionTextView: UITextView {
+    private var measuredWidth: CGFloat = 0
+    override var intrinsicContentSize: CGSize {
+        guard bounds.width > 0 else { return super.intrinsicContentSize }
+        return CGSize(width: UIView.noIntrinsicMetric,
+                      height: ceil(sizeThatFits(CGSize(width: bounds.width, height: .greatestFiniteMagnitude)).height))
+    }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if abs(bounds.width - measuredWidth) > 0.5 {
+            measuredWidth = bounds.width
+            invalidateIntrinsicContentSize()
+        }
     }
 }

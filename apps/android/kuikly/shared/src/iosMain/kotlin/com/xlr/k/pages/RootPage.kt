@@ -305,7 +305,8 @@ private fun RootScreen() {
                     if (!Session.settingsOpen && !Session.skinMenuOpen) Platform.hideIme?.invoke()
                 }
             }
-            .pointerInput(Unit) {
+            .pointerInput(CardSelection.active) {
+                    if (CardSelection.active) return@pointerInput
                 /* ⚠ 这些标记必须活在 pointerInput 的协程里、跨手势记住：
                    原来只在 onDragStart 里 `return@detectHorizontalDragGestures`，只是**退出了那个回调**，
                    拖动照样继续走 onHorizontalDrag —— 于是在设置页/抽屉打开时横向一拖，
@@ -330,13 +331,13 @@ private fun RootScreen() {
                 var velPxS = 0f
                 detectHorizontalDragGestures(
                     onDragStart = {
-                        blocked = Session.recordsOpen || Session.settingsOpen ||
+                        blocked = CardSelection.active || Session.recordsOpen || Session.settingsOpen ||
                             Session.guideOn || Session.skinMenuOpen || Session.splashOn
                         drawerMode = false
                         drawerAcc = 0f
                         dirDecided = false
                         pendingDx = 0f
-                        if (blocked) return@detectHorizontalDragGestures
+                        if (blocked || CardSelection.active) return@detectHorizontalDragGestures
                         dragAcc = 0f
                         lastTick = -1
                         firstMove = true
@@ -350,7 +351,7 @@ private fun RootScreen() {
                         Session.baguaGrp = BAGUA_ALL.shuffled().take(4)
                     },
                     onDragCancel = {
-                        if (blocked) return@detectHorizontalDragGestures
+                        if (blocked || CardSelection.active) return@detectHorizontalDragGestures
                         if (drawerMode) {
                             drawerMode = false
                             Session.recDragging = false
@@ -374,7 +375,7 @@ private fun RootScreen() {
                         }
                     },
                     onDragEnd = {
-                        if (blocked) return@detectHorizontalDragGestures
+                        if (blocked || CardSelection.active) return@detectHorizontalDragGestures
                         if (drawerMode) {
                             drawerMode = false
                             Session.recDragging = false
@@ -421,7 +422,7 @@ private fun RootScreen() {
                         }
                     },
                     onHorizontalDrag = { change, amount ->
-                        if (blocked) return@detectHorizontalDragGestures
+                        if (blocked || CardSelection.active) return@detectHorizontalDragGestures
                         /* 起手点：这个重载的 onDragStart 不带坐标，就用第一帧触点位置当起手（差一两像素无妨） */
                         if (firstMove) {
                             firstMove = false
@@ -628,6 +629,8 @@ private var backArmedAt = 0L
 internal var pageScope: kotlinx.coroutines.CoroutineScope? = null
 
 internal fun handleBack(): Boolean {
+    // Back first leaves text selection, not the detail/page containing it.
+    if (CardSelection.active) { CardSelection.cancel(); return true }
     if (Session.guideZoom != null) {
         Session.guideZoom = null
         return true

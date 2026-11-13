@@ -228,6 +228,7 @@ internal fun JieContent(active: Boolean = true, onNewCast: () -> Unit = {}) {
                             if (h > 0 && h != bodyPx) bodyPx = h
                         }
                 ) {
+                    SelectableCardText(textKey = listOf(answer.ifEmpty { quick }, active, Session.recordsOpen, Session.settingsOpen)) {
                     LazyColumn(
                         state = lst,
                         modifier = Modifier
@@ -241,6 +242,7 @@ internal fun JieContent(active: Boolean = true, onNewCast: () -> Unit = {}) {
                             if (Session.askBusy) BlinkCursor()
                             Spacer(modifier = Modifier.height(12.dp))
                         }
+                    }
                     }
                     /* 滚动条：跟手、停 1 秒淡出（独立小块，只它自己重组） */
                     ScrollHint(lst, bodyPx, density, Modifier.align(Alignment.TopEnd))
@@ -279,11 +281,11 @@ internal fun JieContent(active: Boolean = true, onNewCast: () -> Unit = {}) {
         if (Session.followReady) {
             item {
                 Spacer(modifier = Modifier.height(20.dp))
-                FollowPane(ctx, blocks)
+                FollowPane(ctx, blocks, active = active)
             }
         }
-        
-        item {
+        /* lite 包**不显示**「断卦依据」（口径照桌面 lite：不带判据面板，解卦走白话版提示词） */
+        if (!Platform.lite) item {
             Spacer(modifier = Modifier.height(20.dp))
             /* 「断卦依据」在卡外，它的表头高度决定断辞卡的上限（早期版本是 JS 量完写 --xlr-jie-h）。
                ⚠ 量的是**表头**那一行，不是整张卡：展开后卡片会长到几千 px，量整张会把断辞卡压成一条。 */

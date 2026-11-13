@@ -427,6 +427,7 @@ struct NativeDrawer: View {
     private var body_list: some View {
         if let d = s.detail {
             RecDetailView(m: m, s: s, r: d)
+                .id(d.id)
         } else if s.tab == "rules" {
             if let rl = s.rule {
                 RuleDetailView(m: m, s: s, r: rl)
@@ -1053,19 +1054,19 @@ private struct RecDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     secLabel("所问")
-                    Text(r.q).font(.system(size: 14.5)).lineSpacing(7)
+                    SelectableBodyText(r.q, size: 14.5, color: m.ink, spacing: 7)
                     if !r.bg.isEmpty {
                         Spacer().frame(height: 10)
                         Text("背景").font(.system(size: 10.5, weight: .semibold))
                             .kerning(1.2).foregroundColor(m.dim2)
-                        Text(r.bg).font(.system(size: 13)).lineSpacing(6).foregroundColor(m.dim)
+                        SelectableBodyText(r.bg, size: 13, color: m.dim, spacing: 6)
                             .padding(.top, 3)
                     }
                     hr()
                     secLabel("卦体")
-                    Text(r.gua).font(.system(size: 14.5, design: .serif)).lineSpacing(7)
-                    Text("事类：\(r.cat.isEmpty ? "通用" : r.cat) · 记于 \(r.t)")
-                        .font(.system(size: 11)).foregroundColor(m.dim2)
+                    SelectableBodyText(r.gua, size: 14.5, color: m.ink, spacing: 7, serif: true)
+                    SelectableBodyText("事类：\(r.cat.isEmpty ? "通用" : r.cat) · 记于 \(r.t)",
+                                       size: 11, color: m.dim2)
                     hr()
                     secLabel("当时的断辞")
                     if r.duanci.isEmpty {
@@ -1075,7 +1076,7 @@ private struct RecDetailView: View {
                            （小标题 / 判词大字 / 正文真粗体）。以前直接贴原串 ⇒ `**暴雨**`
                            的星号原样露出来。
                            bigFirst：本机速断首块立大字，模型断辞不放大。 */
-                        DocBlocksView(m: m, raw: r.duanci, bigFirst: r.ans != "model")
+                        DocBlocksView(m: m, raw: r.duanci, bigFirst: r.ans != "model", selectable: true)
                             .padding(.top, 2)
                     }
                     /* ---- 追问：有才显示 ---- */
@@ -1085,12 +1086,10 @@ private struct RecDetailView: View {
                         ForEach(Array(r.thread.enumerated()), id: \.offset) { _, p in
                             HStack(alignment: .top, spacing: 0) {
                                 Text("问 · ").font(.system(size: 12.5)).foregroundColor(m.dim2)
-                                Text(p.count > 0 ? p[0] : "")
-                                    .font(.system(size: 12.5, weight: .medium)).lineSpacing(4)
+                                SelectableBodyText(p.count > 0 ? p[0] : "", size: 12.5, color: m.ink, spacing: 4, weight: .medium)
                             }
                             if p.count > 1 {
-                                Text(p[1]).font(.system(size: 12))
-                                    .lineSpacing(4).foregroundColor(m.dim)
+                                SelectableBodyText(p[1], size: 12, color: m.dim, spacing: 4)
                                     .padding(.top, 3)
                             }
                             Spacer().frame(height: 9)
@@ -1100,13 +1099,12 @@ private struct RecDetailView: View {
                         if followBusy {
                             HStack(alignment: .top, spacing: 0) {
                                 Text("问 · ").font(.system(size: 12.5)).foregroundColor(m.dim2)
-                                Text(pendingQ).font(.system(size: 12.5, weight: .medium)).lineSpacing(4)
+                                SelectableBodyText(pendingQ, size: 12.5, color: m.ink, spacing: 4, weight: .medium)
                             }
                             if s.live.isEmpty {
                                 ThreeDots(color: m.dim2).padding(.top, 6)
                             } else {
-                                Text(s.live).font(.system(size: 12))
-                                    .lineSpacing(4).foregroundColor(m.dim)
+                                SelectableBodyText(s.live, size: 12, color: m.dim, spacing: 4)
                                     .padding(.top, 3)
                             }
                             Spacer().frame(height: 9)
@@ -1168,7 +1166,7 @@ private struct RecDetailView: View {
                             .kerning(1.2).foregroundColor(m.dim2)
                             .padding(.bottom, 6)
                         if !r.rv.isEmpty {
-                            Text(r.rv).font(.system(size: 12.5)).lineSpacing(6)
+                            SelectableBodyText(r.rv, size: 12.5, color: m.ink, spacing: 6)
                             Spacer().frame(height: 8)
                             HStack(spacing: 8) {
                                 setBtn("写入准则", primary: true) { s.act("ruleAdd", r.id); s.tab = "rules" }
@@ -1189,7 +1187,7 @@ private struct RecDetailView: View {
                                 if s.live.isEmpty {
                                     Text("复盘进行中…").font(.system(size: 10.5)).foregroundColor(m.dim2)
                                 } else {
-                                    Text(s.live).font(.system(size: 12.5)).lineSpacing(6)
+                                    SelectableBodyText(s.live, size: 12.5, color: m.ink, spacing: 6)
                                 }
                             }
                             .onAppear {
@@ -1197,12 +1195,11 @@ private struct RecDetailView: View {
                             }
                         } else {
                             /* 没填「实际情况」就复盘 = 让模型凭空猜，先问一句 */
-                            Text(s.live.isEmpty
+                            SelectableBodyText(s.live.isEmpty
                                  ? "还没反馈实际情况。复盘要把这一卦和实际结果一起交给模型，它才看得出错在哪一步。"
-                                 : s.live)
-                                .font(.system(size: s.live.isEmpty ? 10.5 : 12.5))
-                                .lineSpacing(s.live.isEmpty ? 5 : 6)
-                                .foregroundColor(s.live.isEmpty ? m.dim2 : m.ink)
+                                 : s.live, size: s.live.isEmpty ? 10.5 : 12.5,
+                                 color: s.live.isEmpty ? m.dim2 : m.ink,
+                                 spacing: s.live.isEmpty ? 5 : 6)
                             if s.live.isEmpty {
                                 Spacer().frame(height: 6)
                                 setBtn("复盘这一卦", primary: false) { askReview = true }

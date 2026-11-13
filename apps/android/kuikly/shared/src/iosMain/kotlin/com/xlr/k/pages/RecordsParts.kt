@@ -235,7 +235,8 @@ internal fun RecordsOverlay() {
                 }
                 /* 左滑删除：手势挂在**面板**这层（行内那层收不到拖动，只到点击），
                    起手按 y 认最近的一行；松手 easeOutBack 弹到位 */
-                .pointerInput(Unit) {
+                .pointerInput(CardSelection.active) {
+                    if (CardSelection.active) return@pointerInput
                     var activeId = ""
                     /* ★
                        行的左滑先露「删除」（-delW 拉满）；继续左拉的超量算成「收抽屉」，
@@ -617,7 +618,10 @@ internal fun RecordsOverlay() {
                                 translationY = (1f - mpNow) * (if (flip) -6f else 6f) * dens.density
                             }
                             .clip(RoundedCornerShape(12.dp))
-                            
+                            /* ★ 这一版「浅色半透 + 白边 + 顶部 rim 高光」就是对的样式
+                               （lite 2.261101.3 上的样子）。它看着"像没有底"是设计意图，⛔ 别再为了"看清面板"
+                               把 popup 的面改成 surface2 / d.bg——试过两次，用户都判"变灰了 / 变实心了"。
+                               区分靠的是那圈白色内描边和边缘高光，不是底色深浅。 */
                             .glassMaterial(RoundedCornerShape(12.dp), popup = true)
                             .padding(vertical = 4.dp)
                     ) {
@@ -808,6 +812,8 @@ private fun RecDetail(r: Rec, onChange: () -> Unit, onBack: () -> Unit, onRuleWr
         LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
             item {
                 Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                    SelectableCardText(textKey = listOf(r, Session.recordsOpen)) {
+                        Column {
                     SecLabel("所问")
                     Text_(text = r["q"] ?: "", fontSize = 13.5f, lineHeight = 23f)
                     val bg = r["bg"] ?: ""
@@ -832,6 +838,8 @@ private fun RecDetail(r: Rec, onChange: () -> Unit, onBack: () -> Unit, onRuleWr
                         Text_(text = "这一卦没出过断辞。", fontSize = 10.5f, lineHeight = 17f, color = KY_DIM2)
                     } else {
                         DocView(du)
+                    }
+                        }
                     }
                     Spacer(modifier = Modifier.height(14.dp))
                     SecLabel("准不准 · 实际情况")

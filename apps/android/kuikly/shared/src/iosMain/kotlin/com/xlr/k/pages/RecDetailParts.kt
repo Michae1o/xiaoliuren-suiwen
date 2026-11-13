@@ -42,7 +42,7 @@ internal fun RvArea(r: Rec, onChange: () -> Unit, onRuleWritten: () -> Unit = {}
     val miss = LlmStore.missing(LlmStore.load())
 
     if (rv.isNotEmpty()) {
-        Text_(text = rv, fontSize = 12.5f, lineHeight = 22f, color = KY_INK)
+        SelectableCardText(textKey = listOf(id, rv, Session.recordsOpen)) { Text_(text = rv, fontSize = 12.5f, lineHeight = 22f, color = KY_INK) }
         Spacer(modifier = Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             /* 旧 Records.jsx L203-205：写入准则 / 算了，不记 ＋ 一句 mini 说明；
@@ -81,7 +81,7 @@ internal fun RvArea(r: Rec, onChange: () -> Unit, onRuleWritten: () -> Unit = {}
     }
 
     if (live.isNotEmpty()) {
-        Text_(text = live, fontSize = 12.5f, lineHeight = 22f, color = KY_INK)
+        SelectableCardText(textKey = listOf(id, live, Session.recordsOpen)) { Text_(text = live, fontSize = 12.5f, lineHeight = 22f, color = KY_INK) }
         Spacer(modifier = Modifier.height(6.dp))
     }
     if (busy) {
@@ -158,6 +158,8 @@ internal fun FollowAsk(r: Rec, onChange: () -> Unit) {
     }
     if (ans.isNotEmpty()) {
         Spacer(modifier = Modifier.height(8.dp))
-        Text_(text = ans, fontSize = 12f, lineHeight = 21f, color = KY_DIM)
+        SelectableCardText(textKey = listOf(id, ans, Session.recordsOpen)) {
+            Text_(text = ans, fontSize = 12f, lineHeight = 21f, color = KY_DIM)
+        }
     }
 }
