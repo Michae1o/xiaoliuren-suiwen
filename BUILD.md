@@ -19,6 +19,12 @@ npx --yes @tauri-apps/cli@^2 build
 |---|---|
 | Windows | `src-tauri/target/release/xiaoliuren.exe` —— 单个文件，双击即用 |
 | macOS | 同一份源码，在 Mac 上跑 `npx --yes @tauri-apps/cli@^2 build` → `*.app` |
+| Linux | 同一份源码，跑 `bash linux/build-desktop.sh --release` → `.deb` / `.AppImage` |
+
+**改过界面或判据之后要从源码重建**（否则 `tauri build` 用的还是入库的那份壳）：
+macOS 跑 `bash mac/build-desktop.sh --debug`，Linux 跑 `bash linux/build-desktop.sh --debug`。
+这两条脚本跑的是与 Windows 完全相同的前端链（外壳 → 组装 → Vite → 加密 → 落 `web/`），再编原生壳。
+细节见 [`mac/README-MAC.md`](mac/README-MAC.md) / [`linux/README-LINUX.md`](linux/README-LINUX.md)。
 
 前端**不用**先构建：`apps/desktop-shell/web/index.html` 是入库的加密壳，`tauri build` 直接拿它。
 

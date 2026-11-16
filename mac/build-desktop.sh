@@ -1,98 +1,37 @@
 #!/usr/bin/env bash
-# ============================================================
-#  遂问 —— macOS 桌面版编译
-#
-#  前提：Xcode 命令行工具 + Rust + Node 18+
-#  产物：apps/desktop-shell/src-tauri/target/release/bundle/macos/*.app
-#
-#  前端不用先编：apps/desktop-shell/web/index.html 是入库的加密壳，
-#  tauri build 直接拿它。
-# ============================================================
+# 与 Windows 共用 desktop-web + shared-judgment + desktop-shell，始终从源码重建。
 set -euo pipefail
-
-cd "$(dirname "$0")/.."
-ROOT="$(pwd)"
-APP_DIR="$ROOT/apps/desktop-shell"
-SHELL_HTML="$APP_DIR/web/index.html"
-ICNS="$APP_DIR/src-tauri/icons/icon.icns"
-
-step() { echo ""; echo "== $1 =="; }
-die()  { echo ""; echo "✗ $1" >&2; echo "  $2" >&2; exit 1; }
-
-echo "=============================================="
-echo " 遂问 —— macOS 构建"
-echo " 仓库：$ROOT"
-echo " 架构：$(uname -m)"
-echo "=============================================="
-
-# ---------- 1 环境 ----------
-step "1/4 检查环境"
-
-if ! xcode-select -p >/dev/null 2>&1; then
-  die "缺 Xcode 命令行工具" "装：xcode-select --install    （弹窗点安装，几分钟）"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+MODE="${1:---debug}"
+case "$MODE" in --debug|--release|--frontend-only) ;; *) echo '用法：bash mac/build-desktop.sh [--debug|--release|--frontend-only]' >&2; exit 2 ;; esac
+PYTHON="${PYTHON:-python3}"
+command -v node >/dev/null
+command -v npm >/dev/null
+command -v "$PYTHON" >/dev/null
+[ "$(node -p 'Number(process.versions.node.split(".")[0])')" -ge 22 ] || { echo '请安装 Node 22 或更新 LTS'; exit 1; }
+"$PYTHON" -c 'from PIL import Image' || { echo '请先安装 Pillow：python3 -m pip install Pillow'; exit 1; }
+if [ "$MODE" != --frontend-only ]; then
+  [ "$(uname -s)" = Darwin ] || { echo '原生 .app 必须在 macOS 构建；Linux 可使用 --frontend-only'; exit 1; }
+  xcode-select -p >/dev/null
+  if ! command -v cargo >/dev/null && [ -f "$HOME/.cargo/env" ]; then . "$HOME/.cargo/env"; fi
+  command -v cargo >/dev/null
 fi
-echo "  ✓ Xcode 命令行工具：$(xcode-select -p)"
-
-if ! command -v rustc >/dev/null 2>&1; then
-  # rustup 装完不一定在当前 shell 的 PATH 里，试一下标准位置
-  if [ -f "$HOME/.cargo/env" ]; then
-    # shellcheck disable=SC1091
-    . "$HOME/.cargo/env"
-  fi
-fi
-if ! command -v rustc >/dev/null 2>&1; then
-  die "缺 Rust" "装：curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-     然后：source \"\$HOME/.cargo/env\""
-fi
-echo "  ✓ Rust：$(rustc --version)"
-
-if ! command -v node >/dev/null 2>&1; then
-  die "缺 Node" "装：官网下载，或 brew install node"
-fi
-NODE_MAJOR="$(node -v | sed 's/^v//' | cut -d. -f1)"
-if [ "$NODE_MAJOR" -lt 18 ]; then
-  die "Node 版本太低（当前 $(node -v)）" "Tauri 2 需要 Node 18 以上"
-fi
-echo "  ✓ Node：$(node -v)"
-
-# ---------- 2 入库产物 ----------
-step "2/4 检查前端壳与图标"
-
-if [ ! -f "$SHELL_HTML" ]; then
-  die "缺前端加密壳：$SHELL_HTML" "这个文件是入库的；没有它说明仓库不完整，重新 clone"
-fi
-echo "  ✓ 前端壳：$(du -h "$SHELL_HTML" | cut -f1)"
-
-if [ ! -f "$ICNS" ]; then
-  die "缺图标：$ICNS" "tauri.macos.conf.json 指向它；换图标见 mac/README-MAC.md 第四节"
-fi
-echo "  ✓ 图标：$(du -h "$ICNS" | cut -f1)"
-
-# ---------- 3 依赖 ----------
-step "3/4 安装依赖（首次较慢）"
-
-if [ -d "$ROOT/node_modules" ]; then
-  echo "  ✓ node_modules 已存在，跳过 npm install"
+bash "$ROOT/tools/build-desktop-frontend.sh"
+echo '3/5 从当前 Windows 同源 PNG 生成 Mac 图标（不覆盖 ICO）'
+"$PYTHON" tools/gen-icns.py
+if [ "$MODE" = --frontend-only ]; then echo '前端与图标已生成；未编译或运行 Mac App'; exit 0; fi
+echo '4/5 构建共享 Rust 外壳'
+cd apps/desktop-shell
+# 默认调试 App，先在 Mac 验证后再显式 --release；保持现有应用 identifier/记录目录。
+if [ "$MODE" = --debug ]; then
+  npx --yes @tauri-apps/cli@2 build --debug --config src-tauri/tauri.macos.conf.json
+  PROFILE=debug
 else
-  ( cd "$ROOT" && npm install )
+  npx --yes @tauri-apps/cli@2 build --config src-tauri/tauri.macos.conf.json
+  PROFILE=release
 fi
-
-# ---------- 4 编译 ----------
-step "4/4 编译（首次编 Rust 依赖约 3–8 分钟）"
-
-cd "$APP_DIR"
-npx --yes @tauri-apps/cli@^2 build
-
-BUNDLE="$APP_DIR/src-tauri/target/release/bundle/macos"
-step "完成"
-
-if [ -d "$BUNDLE" ]; then
-  echo "  产物目录：$BUNDLE"
-  ls -1 "$BUNDLE" | while read -r f; do echo "    · $f"; done
-  echo ""
-  echo "  双击 .app 即可打开。"
-  echo "  发给别人后第一次打开要右键 → 打开（未签名应用的正常提示）。"
-else
-  echo "  ⚠ 编译报告成功但没找到 $BUNDLE"
-  echo "  看 apps/desktop-shell/src-tauri/target/release/ 下有什么"
-fi
+APP="$ROOT/apps/desktop-shell/src-tauri/target/$PROFILE/bundle/macos/遂问.app"
+[ -d "$APP" ] || { echo "没有找到预期产物：$APP" >&2; exit 1; }
+echo "5/5 已生成：$APP"
+echo '这不代表已完成签名、公证或实机验收。请先打开检查，正式发布另走签名流程。'

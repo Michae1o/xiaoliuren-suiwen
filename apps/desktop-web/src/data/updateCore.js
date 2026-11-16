@@ -37,6 +37,14 @@ export function isDesktop() {
   return !!invokeFn();
 }
 
+/* 整包换装协议目前只有 Windows；必须在取清单/下载前确认原生平台。 */
+async function requireWindowsUpdater() {
+  var inv = invokeFn();
+  if (!inv) throw new Error('这条线没有整包更新');
+  var platform = await inv('app_platform');
+  if (platform !== 'windows') throw new Error('此平台暂不支持应用内自动更新，请使用对应平台的新版本安装包');
+}
+
 /* 当前版本：Rust 从 Cargo.toml 读，与 tauri.conf / build.gradle 由 版本号.py 一起写 */
 export function currentVersion() {
   var inv = invokeFn();
@@ -58,7 +66,8 @@ export function cmpVersion(a, b) {
 }
 
 /* 查一次清单。返回 { current, channel, hasNew, info } */
-export function check() {
+export async function check() {
+  await requireWindowsUpdater();
   var inv = invokeFn();
   if (!inv) return Promise.reject(new Error('这条线没有整包更新'));
   /* 协作包/开源包里这条是空的（导出器留空，见 tools\make-collab-bundle.py）⇒ 明说没配，别去别人的站点拉 */
@@ -85,7 +94,8 @@ export function check() {
 }
 
 /* 下载 + 校验 + 铺好 + 写换装脚本。返回一句给人看的话 */
-export function apply(info) {
+export async function apply(info) {
+  await requireWindowsUpdater();
   var inv = invokeFn();
   if (!inv) return Promise.reject(new Error('这条线没有整包更新'));
   return inv('apply_update', {

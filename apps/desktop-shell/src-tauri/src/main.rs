@@ -311,6 +311,11 @@ fn find_payload(dir: &std::path::Path) -> Option<std::path::PathBuf> {
 
 /// 当前版本（Cargo.toml 那处，`tools\版本号.py` 与 tauri.conf 一起写，不会漂）
 #[tauri::command]
+fn app_platform() -> &'static str {
+    std::env::consts::OS
+}
+
+#[tauri::command]
 fn app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
@@ -335,6 +340,9 @@ async fn apply_update(
     sha256: String,
     size: u64,
 ) -> Result<String, String> {
+    if !cfg!(target_os = "windows") {
+        return Err("此平台暂不支持应用内自动换装，请使用对应平台的新版本安装包".into());
+    }
     /* 先把「这台机器是什么结构」记下来 —— 出问题时 update.log 里能直接看到 */
     let plan = plan_update();
     let head = match &plan {
@@ -567,8 +575,10 @@ fn open_folder(path: Option<String>) -> Result<(), String> {
     }
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     {
+        // xdg-open 文件会启动默认应用；这里的职责是打开文件所在目录。
+        let directory = if is_file { t.parent().unwrap_or(t.as_path()) } else { t.as_path() };
         std::process::Command::new("xdg-open")
-            .arg(&t)
+            .arg(directory)
             .spawn()
             .map_err(|e| e.to_string())?;
     }
@@ -589,6 +599,7 @@ fn main() {
             open_url,
             save_export,
             app_version,
+            app_platform,
             apply_update,
             update_progress,
             quit_app,

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# 双击我 —— 在 Finder 里运行同目录的 build-desktop.sh
-# 第一次双击若被 Gatekeeper 拦，右键 → 打开 → 仍要打开
 cd "$(dirname "$0")" || exit 1
-bash ./build-desktop.sh
+bash ./build-desktop.sh --debug
+status=$?
 echo ""
+if [ "$status" -ne 0 ]; then echo "构建失败（exit $status），请查看上方错误。"; fi
 read -n 1 -s -r -p "按任意键关闭这个窗口…"
 echo ""
+exit "$status"
