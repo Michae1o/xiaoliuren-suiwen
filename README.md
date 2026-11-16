@@ -37,7 +37,7 @@
 
 ## 界面
 
-桌面（Windows / macOS）：
+桌面（Windows / macOS / Linux）：
 
 | 问卦 | 排盘 | 卦例本 |
 |---|---|---|
@@ -59,7 +59,7 @@
 
 | 端 | 在哪 | 怎么出包 |
 |---|---|---|
-| **桌面（Windows / macOS）** | `apps/desktop-web/` + `apps/desktop-shell/`（Tauri 2 壳） | `npx --yes @tauri-apps/cli@^2 build`；macOS 用 `bash mac/build-desktop.sh` |
+| **桌面（Windows / macOS / Linux）** | `apps/desktop-web/` + `apps/desktop-shell/`（Tauri 2 壳） | `npx --yes @tauri-apps/cli@^2 build`；macOS 用 `bash mac/build-desktop.sh`，Linux 用 `bash linux/build-desktop.sh`（出 deb / AppImage） |
 | **安卓** | `apps/android/`（Kotlin Multiplatform + Kuikly + Compose） | `gradlew :androidApp:assembleRelease` |
 | **iOS** | `apps/android/kuikly/iosApp/` + `.github/workflows/ios-sim.yml` | 推到 GitHub 由 macOS runner 编，出未签名 ipa |
 
@@ -71,7 +71,7 @@ iOS 与安卓共用同一份 Kotlin（`shared/`），壳是 Swift。
 | 层 | 用什么 |
 |---|---|
 | 桌面前端 | React 19、Vite 6、Tailwind 4、GSAP / Motion |
-| 桌面外壳 | Tauri 2（Rust），Windows 走 WebView2，macOS 走 WKWebView |
+| 桌面外壳 | Tauri 2（Rust），Windows 走 WebView2，macOS 走 WKWebView，Linux 走 WebKitGTK |
 | 判据 | 纯 ES 模块（`apps/shared-judgment`），界面层 import，不含框架依赖 |
 | 安卓 / iOS | Kotlin Multiplatform + Kuikly + Compose（`apps/android`） |
 | 产物 | 前端用 `vite-plugin-singlefile` 打成单文件 HTML，再由 `protect.py` 上壳 |
@@ -80,7 +80,7 @@ iOS 与安卓共用同一份 Kotlin（`shared/`），壳是 Swift。
 
 ### 只想编译桌面成品
 
-需要 **Node 18+** 和 **Rust（cargo）**；Windows 另需 MSVC Build Tools。
+需要 **Node 18+** 和 **Rust（cargo）**；Windows 另需 MSVC Build Tools；Linux 另需 GTK 3 / WebKitGTK 4.1 开发包。
 
 ```bash
 npm install                      # 仓库根目录，一次
@@ -90,7 +90,11 @@ npx --yes @tauri-apps/cli@^2 build
 ```
 
 产物：`apps/desktop-shell/src-tauri/target/release/xiaoliuren.exe`（单文件，双击即用）。
-macOS 用 `bash mac/build-desktop.sh`，细节见 [`mac/README-MAC.md`](mac/README-MAC.md)。
+macOS 用 `bash mac/build-desktop.sh`，细节见 [`mac/README-MAC.md`](mac/README-MAC.md)；
+Linux 用 `bash linux/build-desktop.sh --release`（出 `.deb` / `.AppImage`），细节见 [`linux/README-LINUX.md`](linux/README-LINUX.md)。
+
+⚠ 改过界面或判据之后走上面这两条 bash 入口：它们会先用同一条前端链重建加密壳，
+直接 `tauri build` 用的还是入库的那份旧壳。
 
 > 双击没反应，八成是系统缺 WebView2 运行时（Win11 自带，Win10 到微软官网装一次即可）。
 
@@ -154,8 +158,9 @@ src/corpus.js            打包成代码读的形式
 | `apps/android/` | 安卓与 iOS：`kuikly/` 是 Gradle 工程（`shared/` 共享层、`androidApp/`、`iosApp/`） |
 | `apps/desktop-shell/` | Tauri 2 壳；`web/index.html` 是入库的加密壳，`pkg/` 是 Windows 启动器 |
 | `apps/desktop-web/build/` | 上壳链：`protect.py`（加密）、`prep_tauri_web.py`（生成壳） |
-| `tools/` | 组装器、文档入口生成、语料打包 |
+| `tools/` | 组装器、文档入口生成、语料打包、跨平台构建入口 |
 | `mac/` | macOS 构建脚本与说明 |
+| `linux/` | Linux 构建脚本与说明（deb / AppImage） |
 | `docs/images/` | README 里这几张截图 |
 
 ## 常见问题
