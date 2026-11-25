@@ -10,7 +10,6 @@ command -v "$PYTHON" >/dev/null
 [ "$(node -p 'Number(process.versions.node.split(".")[0])')" -ge 22 ] || { echo '请安装 Node 22 或更新 LTS' >&2; exit 1; }
 if [ ! -x node_modules/.bin/vite ]; then npm ci; fi
 export XLR_WEB_SHELL="$ROOT/apps/desktop-shell/web"
-export XLR_LITE="${XLR_LITE:-0}"
 echo '构建共享桌面前端与判据'
 (cd apps/desktop-web && npm run build:shell)
 node tools/assemble-desktop.mjs --append "$ROOT/apps/desktop-web/shell-dist/shell.js"

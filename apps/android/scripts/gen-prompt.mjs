@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..')
 const ROOT_URL = ROOT.split(path.sep).join('/')
 const P = await import('file:///' + ROOT_URL + '/apps/shared-judgment/src/prompt.js')
+const FU = await import('file:///' + ROOT_URL + '/apps/shared-judgment/src/followup.js')
 
 function q(s) {
   let out = ''
@@ -33,5 +34,24 @@ o.push('/* 内容来自 apps/shared-judgment/src/prompt.js；由 scripts/gen-pro
 o.push('')
 o.push('internal val SYS: String = ' + q(P.SYS))
 o.push('')
+o.push('/* 接着问（追问）的规矩：与桌面/小程序同一个真源 apps/shared-judgment/src/followup.js')
+o.push('   ⛔ 端上不许再抄一份；要改口径只改那个 js，然后重跑本脚本。 */')
+o.push('internal val FOLLOW_HEAD: String = ' + q(FU.FOLLOW_HEAD))
+o.push('internal val FOLLOW_L_JUDGE: String = ' + q(FU.FOLLOW_LABEL.judge))
+o.push('internal val FOLLOW_L_DUANCI: String = ' + q(FU.FOLLOW_LABEL.duanci))
+o.push('internal val FOLLOW_L_ASKED: String = ' + q(FU.FOLLOW_LABEL.asked))
+o.push('internal val FOLLOW_L_FIRST: String = ' + q(FU.FOLLOW_LABEL.first))
+o.push('internal val FOLLOW_L_ASK: String = ' + q(FU.FOLLOW_LABEL.ask))
+o.push('internal val FOLLOW_L_RULES: String = ' + q(FU.FOLLOW_LABEL.rules))
+o.push('internal val FOLLOW_Q_PRE: String = ' + q(FU.FOLLOW_LABEL.qPre))
+o.push('internal val FOLLOW_A_PRE: String = ' + q(FU.FOLLOW_LABEL.aPre))
+o.push('internal val FOLLOW_COLON: String = ' + q(FU.FOLLOW_LABEL.colon))
+o.push('')
+o.push('internal val FOLLOW_RULES: List<String> = listOf(')
+FU.FOLLOW_RULES.forEach((r, i) => {
+  o.push('    ' + q(r) + (i === FU.FOLLOW_RULES.length - 1 ? '' : ','))
+})
+o.push(')')
+o.push('')
 fs.writeFileSync(OUT, o.join('\n'), 'utf8')
-console.log('SYS chars:', P.SYS.length, '| bytes:', fs.statSync(OUT).size)
+console.log('SYS chars:', P.SYS.length, '| FOLLOW_RULES:', FU.FOLLOW_RULES.length, '| bytes:', fs.statSync(OUT).size)

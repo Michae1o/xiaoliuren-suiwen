@@ -1,0 +1,56 @@
+.hg-study-backdrop {position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:-1}
+.hg-study-photo {position:absolute;overflow:hidden;height:auto;max-width:none;pointer-events:none;user-select:none}
+.hg-study-thunder-main {
+  width:clamp(252px,54%,754px);left:-4.2%;top:-3%;
+  mask-image:radial-gradient(ellipse 96% 92% at 17% 7%,#000 24%,#000d 55%,#0005 78%,transparent 100%);
+}
+.hg-study-thunder-bounce {
+  position:absolute;left:-4%;top:-6%;width:53%;height:35%;
+  background:radial-gradient(ellipse at 31% 15%,#f9dcc1 0%,#e9d4bd88 24%,#efdbc627 50%,transparent 75%);
+  mask-image:radial-gradient(ellipse 100% 85% at 30% 4%,#000 10%,#000a 52%,transparent 93%);
+}
+.hg-study-ripples-main {
+  width:clamp(145px,33%,475px);left:35%;bottom:1.1%;transform-origin:33% 80%;
+  mask-image:radial-gradient(ellipse 49% 49% at 50% 53%,#000 19%,#000b 49%,#0004 76%,transparent 100%);
+}
+.hg-study-ripples-ring {
+  width:clamp(192px,42%,599px);left:3%;bottom:5%;transform-origin:50% 57%;
+  mask-image:radial-gradient(ellipse 48% 47% at 50% 50%,#000 20%,#000c 48%,#0005 73%,transparent 100%);
+}
+.hg-study-ripple-contact {
+  position:absolute;width:8px;height:17px;left:25.5%;bottom:8.1%;
+  background:radial-gradient(ellipse,#ecf4ee81 0%,#98a9a947 34%,transparent 71%);
+}
+.hg-study-canopy-main {
+  width:clamp(258px,33%,582px);left:-4%;top:-9%;
+  mask-image:radial-gradient(ellipse 74% 90% at 24% 0%,#000 23%,#000b 49%,#0005 75%,transparent 100%);
+}
+.hg-study-canopy-far {
+  width:clamp(101px,24%,362px);right:-10%;top:-11%;
+  mask-image:radial-gradient(ellipse 86% 91% at 82% 0%,#000 14%,#000c 49%,#0004 74%,transparent 100%);
+}
+.hg-study-grainfill-main {
+  width:auto;height:clamp(185px,40%,339px);left:1.2%;bottom:-4.8%;transform-origin:16% 85%;
+  mask-image:
+    radial-gradient(ellipse 77% 75% at 22% 76%,#000 17%,#000e 45%,#0007 68%,transparent 100%),
+    linear-gradient(180deg,transparent 0%,#000 18%,#000 83%,transparent 100%);
+  mask-composite:intersect;
+}
+.hg-study-grainfill-far {
+  width:auto;height:clamp(144px,30%,258px);left:9.9%;bottom:-4%;transform-origin:23% 89%;
+  mask-image:
+    radial-gradient(ellipse 61% 63% at 34% 79%,#000 14%,#000c 45%,#0004 68%,transparent 100%),
+    linear-gradient(180deg,transparent 0%,#000 17%,#000 80%,transparent 100%);
+  mask-composite:intersect;
+}
+@media(max-width:690px),(max-aspect-ratio:1/1) {
+  .hg-study-thunder-main{width:clamp(183px,65%,391px);top:-1%}
+  .hg-study-thunder-bounce{width:74%;height:23%;top:-3%}
+  .hg-study-ripples-main{width:clamp(107px,40%,215px);left:46%;bottom:2%}
+  .hg-study-ripples-ring{width:clamp(152px,58%,298px);left:1%;bottom:5.1%}
+  .hg-study-ripple-contact{left:29%;bottom:7.5%}
+  .hg-study-canopy-main{width:clamp(156px,53%,330px);top:-4%}
+  .hg-study-canopy-far{width:clamp(106px,35%,231px);top:-5%}
+  .hg-study-grainfill-main{height:clamp(174px,31%,279px);bottom:-3.4%}
+  .hg-study-grainfill-far{height:clamp(128px,24%,197px);left:17%;bottom:-3.2%}
+}

@@ -53,6 +53,8 @@ object Platform {
     /** 把页面底色同步给宿主窗口：底部内边距让出来的那块必须跟页面同色，
      *  否则动画中途会露出白色（Activity 窗口底色）。 */
     var setPageBg: ((Float, Float, Float) -> Unit)? = null
+    /** Full-screen Recall temporarily paints a dark backdrop behind the transparent status bar. */
+    var setRecallStatusBackdrop: ((Boolean) -> Unit)? = null
     /** 系统返回键（宿主 onBackPressed 里调）：返回 true = 共享层已经消化掉，别退 Activity。
      *  次序见 RootPage 的 handleBack：浮层 → 设置 → 记录抽屉 → 三页（两次退出）。 */
     var onBack: (() -> Boolean)? = null

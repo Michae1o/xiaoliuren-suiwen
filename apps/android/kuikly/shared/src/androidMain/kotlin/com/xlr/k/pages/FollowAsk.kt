@@ -41,6 +41,17 @@ import com.tencent.kuikly.compose.ui.unit.dp
 import com.tencent.kuikly.compose.ui.unit.sp
 import com.xlr.k.judge.Block
 import com.xlr.k.judge.Context
+import com.xlr.k.judge.FOLLOW_A_PRE
+import com.xlr.k.judge.FOLLOW_COLON
+import com.xlr.k.judge.FOLLOW_HEAD
+import com.xlr.k.judge.FOLLOW_L_ASK
+import com.xlr.k.judge.FOLLOW_L_ASKED
+import com.xlr.k.judge.FOLLOW_L_DUANCI
+import com.xlr.k.judge.FOLLOW_L_FIRST
+import com.xlr.k.judge.FOLLOW_L_JUDGE
+import com.xlr.k.judge.FOLLOW_L_RULES
+import com.xlr.k.judge.FOLLOW_Q_PRE
+import com.xlr.k.judge.FOLLOW_RULES
 import com.xlr.k.judge.plainAll
 import kotlinx.coroutines.launch
 
@@ -86,27 +97,31 @@ private const val NO_KEY_NOTE = "还没配模型。点「设置」配一个再�
 
 /* 旧 followupUser(c, B, thread, q) 逐字（modelAskCore L199–219） */
 internal fun followUserMain(c: Context, B: List<Block>, thread: List<Pair<String, String>>, q: String): String {
+    /* ★ 规矩与标签只有一份：PromptData.kt 由 apps/shared-judgment/src/followup.js 生成。
+       ⛔ 这里不许再写死任何一句规矩文本（四端同源）。 */
     val L = mutableListOf<String>()
-    L.add("请接着这一卦继续答（接前卦：同一卦内追问，不另起卦）。")
+    L.add(FOLLOW_HEAD)
     L.add("")
+    L.add(FOLLOW_L_JUDGE)
     L.add(plainAll(c, B))
-    L.add("【这一卦已经答过的】")
-    if (thread.isEmpty()) L.add("（这是第一次追问）")
+    L.add("")
+    if (Session.askAnswer.isNotBlank()) {
+        L.add(FOLLOW_L_DUANCI)
+        L.add(Session.askAnswer.trim())
+        L.add("")
+    }
+    L.add(FOLLOW_L_ASKED)
+    if (thread.isEmpty()) L.add(FOLLOW_L_FIRST)
     thread.forEachIndexed { i, it ->
-        L.add("问${i + 1}：" + it.first)
-        L.add("答${i + 1}：" + it.second)
+        L.add(FOLLOW_Q_PRE + (i + 1) + FOLLOW_COLON + it.first)
+        L.add(FOLLOW_A_PRE + (i + 1) + FOLLOW_COLON + it.second)
     }
     L.add("")
-    L.add("【这次要问的】")
+    L.add(FOLLOW_L_ASK)
     L.add(q)
     L.add("")
-    L.add("【续问规矩】")
-    L.add("① 只用这一卦：不另起、不重起，答案要从这一卦里得出；")
-    L.add("② 落宫为主：先看这一问在这卦里对应到哪座宫、什么关系，再答（问什么，是什么）；")
-    L.add("③ 每处判断括注依据（哪宫／哪关系／哪条判据）；")
-    L.add("④ 这一问若不在这一卦里（问的是旁人别的事、或无端之问），直接说「这不在这一卦里」并讲清原因，不要硬答；")
-    L.add("⑤ 不要主动再问、不要邀着继续问、不展开没问到的东西；")
-    L.add("⑥ 格式同主断辞（【结论】【断辞】…），宁短勿长、够用即止。")
+    L.add(FOLLOW_L_RULES)
+    FOLLOW_RULES.forEach { L.add(it) }
     return L.joinToString("\n")
 }
 

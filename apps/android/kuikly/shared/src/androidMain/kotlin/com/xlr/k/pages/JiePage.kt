@@ -123,11 +123,21 @@ internal fun JieContent(active: Boolean = true, onNewCast: () -> Unit = {}) {
     }
     val blocks = com.xlr.k.judge.buildBlocks(ctx)
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val quick = com.xlr.k.judge.quickRead(
-        ctx,
-        kotlinx.datetime.Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()),
-    )
+    val recordId = Session.recId
+    val quick = remember(recordId, ctx) {
+        com.xlr.k.judge.quickRead(
+            ctx,
+            kotlinx.datetime.Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()),
+        )
+    }
     val answer = Session.askAnswer
+
+    // 三页常驻；只在真正看到叁页时保存它实际显示的本机速断，不把速断标成模型结果。
+    LaunchedEffect(active, recordId, quick) {
+        if (active && Session.recId == recordId && Session.ctx === ctx) {
+            RecStore.updateDuanci(recordId, quick, model = false)
+        }
+    }
 
     /* ★★ 定稿，照手机端早期版本（apps/mobile-web/src/styles/legacy.css L4386 那套）：
        ① 卡片＝**一屏高的卡**：上限 = 可用高 − 底部「断卦依据」条（实测高度），不再无限长；
@@ -275,6 +285,12 @@ private fun BlinkCursor() {
 
 /* 让模型解卦：配好就直接发，没配好先弹设置（旧实现同一路由：没配置 ⇒ 引导去设置页） */
 internal suspend fun askNow(ctx: Context, blocks: List<Block>) {
+    // 界面回调可能落后于换卦；把上下文、记录与请求序号一起绑在本次请求上。
+    val recordId = Session.recId
+    val seq = Session.castSeq
+    fun isCurrent() = Session.castSeq == seq && Session.recId == recordId && Session.ctx === ctx
+    if (recordId.isBlank() || !isCurrent() || Session.askBusy) return
+
     Session.askErr = ""
     val cfg = LlmStore.load()
     val miss = LlmStore.missing(cfg)
@@ -288,32 +304,35 @@ internal suspend fun askNow(ctx: Context, blocks: List<Block>) {
     Session.askAnswer = ""
     Session.followReady = false      /* 早期版本是答完才 show:true；重解一次先收回 */
     Session.askStat = ""             /* 免得「解卦中」时还挂着上一轮的用时 */
-    /* ★ 记下这是第几卦 —— 解卦还在路上时用户又起了一卦的话，
-       这一趟的流式文字与收尾统统作废，别把上一卦的断辞写进新卦。 */
-    val seq = Session.castSeq
     val t0 = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
     try {
         val user = "请按格式解这一卦：\n\n" + com.xlr.k.judge.plainAll(ctx, blocks)
         /* 流式：每来一段就把「已累计全文」写回界面（早期版本就是这个观感） */
         val out = askModelStream(cfg, com.xlr.k.judge.SYS, user) { t ->
-            if (Session.castSeq == seq) Session.askAnswer = t
+            if (isCurrent()) Session.askAnswer = t
         }
         /* 解卦途中换了卦：这一趟的文字与落款都不算当前这一卦的，丢掉 */
-        if (Session.castSeq != seq) return
-        Session.askAnswer = out.trim().ifEmpty { Session.askAnswer.trim() }
+        if (!isCurrent()) return
+        val answer = out.trim().ifEmpty { Session.askAnswer.trim() }
+        if (answer.isBlank()) {
+            Session.askErr = "模型没有返回断辞。"
+            return
+        }
+        Session.askAnswer = answer
         Session.askModelLabel = cfg.model
         /* 旧 modelAskCore L137：`模型 <model> · 用时 <sec> 秒 · 连接方式：<直连/本地中转>` */
         val sec = ((kotlinx.datetime.Clock.System.now().toEpochMilliseconds() - t0) / 100.0).toInt() / 10.0
         Session.askStat = "模型 " + cfg.model + " · 用时 " + sec + " 秒 · 连接方式：" +
             (if (cfg.wire == "proxy") "本地中转" else "浏览器直连")
         /* 断辞写回卦例本那一条（早期版本 updateCaseDuanci + markModelAnswered） */
-        RecStore.updateDuanci(Session.recId, Session.askAnswer, model = true)
+        RecStore.updateDuanci(recordId, answer, model = true)
         Session.followReady = true     /* 答完 ⇒ 「接着问」出现 */
     } catch (e: Throwable) {
-        if (Session.castSeq != seq) return       /* 换卦了：别把上一趟的错贴到新卦上 */
+        if (e is kotlinx.coroutines.CancellationException) throw e
+        if (!isCurrent()) return       /* 换卦了：别把上一趟的错贴到新卦上 */
         if (Session.askAnswer.isBlank()) Session.askErr = e.message ?: "解卦失败" else Session.askErr = e.message ?: ""
     } finally {
-        if (Session.castSeq == seq) Session.askBusy = false
+        if (isCurrent()) Session.askBusy = false
     }
 }
 
@@ -489,7 +508,7 @@ private fun EvidenceCard(blocks: List<Block>, onHeaderH: (Int) -> Unit) {
             Text_(text = "断卦依据", fontSize = 14f, lineHeight = 26f, weight = 500)
             Spacer(modifier = Modifier.width(13.dp))
             Text_(
-                text = blocks.size.toString() + " 组 · 每条带出处",
+                text = blocks.count { it.n != "I" }.toString() + " 组",
                 fontSize = 11.5f,
                 lineHeight = 24f,
                 color = KY_DIM2,
@@ -515,7 +534,7 @@ private fun EvidenceCard(blocks: List<Block>, onHeaderH: (Int) -> Unit) {
                     .fillMaxWidth()
                     .padding(start = 10.dp, end = 10.dp, bottom = 6.dp)
             ) {
-                blocks.forEach { b -> EvGroup(b) }
+                blocks.filter { it.n != "I" }.forEach { b -> EvGroup(b) }
             }
         }
         }
@@ -610,15 +629,6 @@ private fun EvGroup(b: com.xlr.k.judge.Block) {
                                 lineHeight = 18f,
                                 color = KY_DIM,
                             )
-                            if (it.src.isNotEmpty()) {
-                                Text_(
-                                    text = "出处：" + it.src,
-                                    fontSize = 10f,
-                                    lineHeight = 16f,
-                                    color = KY_DIM2,
-                                    modifier = Modifier.padding(top = 2.dp),
-                                )
-                            }
                         }
                     }
                 }

@@ -20,6 +20,9 @@ import com.xlr.k.adapter.KRUncaughtExceptionHandlerAdapter
 class MainActivity : AppCompatActivity() {
 
     private lateinit var delegator: KuiklyRenderViewBaseDelegator
+    private val recallStatusBar: (Boolean) -> Unit = { darkBackdrop ->
+        runOnUiThread { if (!isDestroyed) setRecallStatusBar(darkBackdrop) }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,6 +39,7 @@ class MainActivity : AppCompatActivity() {
            读到 K_SKIN 再切 ⇒ 冷启动闪一帧黑白。这里在 Kuikly 视图创建前先读回来。 */
         com.xlr.k.pages.preloadSkinForHost()
         setupImmersiveMode()
+        com.xlr.k.pages.Platform.setRecallStatusBackdrop = recallStatusBar
 
         val container = findViewById<ViewGroup>(R.id.hr_container)
         applyImeInset(container)
@@ -141,6 +145,8 @@ class MainActivity : AppCompatActivity() {
         val delegate = object : KuiklyRenderViewBaseDelegatorDelegate {
             override fun registerExternalRenderView(export: com.tencent.kuikly.core.render.android.IKuiklyRenderExport) {
                 export.renderViewExport("XLRRealtimeFog", { context -> com.xlr.k.fog.RealtimeFogView(context) })
+                export.renderViewExport("XLRRecallAtmosphere", { context -> com.xlr.k.recall.RecallAtmosphereView(context) })
+                export.renderViewExport("XLRRecallSeasonal", { context -> com.xlr.k.recall.RecallSeasonalView(context) })
             }
         }
         delegator = KuiklyRenderViewBaseDelegator(delegate)
@@ -162,10 +168,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        com.xlr.k.pages.setRecallReminderForeground(true)
         if (::delegator.isInitialized) delegator.onResume()
     }
 
     override fun onPause() {
+        com.xlr.k.pages.setRecallReminderForeground(false)
         super.onPause()
         if (::delegator.isInitialized) delegator.onPause()
         /* 切后台立刻把备份落盘（防着起完一卦就被系统杀掉，3 秒的合并窗口还没到） */
@@ -173,6 +181,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        if (com.xlr.k.pages.Platform.setRecallStatusBackdrop === recallStatusBar) {
+            setRecallStatusBar(false)
+            com.xlr.k.pages.Platform.setRecallStatusBackdrop = null
+        }
         super.onDestroy()
         if (::delegator.isInitialized) delegator.onDetach()
         com.xlr.k.LlmHost.activity = null
@@ -244,6 +256,19 @@ class MainActivity : AppCompatActivity() {
     private var imeAnim: android.animation.ValueAnimator? = null
     private var imePadTarget = -1
     private var pageBgInt = 0
+
+    @Suppress("DEPRECATION")
+    private fun setRecallStatusBar(darkBackdrop: Boolean) {
+        if (Build.VERSION.SDK_INT >= 30) {
+            val lightStatus = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+            window.insetsController?.setSystemBarsAppearance(if (darkBackdrop) 0 else lightStatus, lightStatus)
+        } else {
+            val decor = window.decorView
+            val lightStatus = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+            decor.systemUiVisibility = if (darkBackdrop) decor.systemUiVisibility and lightStatus.inv()
+                else decor.systemUiVisibility or lightStatus
+        }
+    }
 
     private fun setupImmersiveMode() {
         window.statusBarColor = Color.TRANSPARENT

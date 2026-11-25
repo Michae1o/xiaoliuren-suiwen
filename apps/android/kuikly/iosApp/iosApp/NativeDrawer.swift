@@ -115,6 +115,7 @@ struct NativeDrawer: View {
     @ObservedObject var s: DrawerModel
 
     @State private var closing = false
+    @Environment(\.accessibilityReduceMotion) private var reduceTabMotion
 
     private var W: CGFloat { UIScreen.main.bounds.width }
     private var panelW: CGFloat { W * 0.72 }
@@ -401,26 +402,65 @@ struct NativeDrawer: View {
     }
 
     private var tabs: some View {
-        HStack(spacing: 16) {
-            tabItem("卦例", on: s.tab == "cases") { s.tab = "cases"; s.detailId = ""; s.menuId = ""; s.ruleId = "" }
-            tabItem("准则 \(s.rules.count)", on: s.tab == "rules") { s.tab = "rules"; s.detailId = ""; s.menuId = ""; s.ruleId = "" }
-            Spacer(minLength: 0)
+        GeometryReader { geo in
+            let half = geo.size.width / 2
+            let rulesSelected = s.tab == "rules"
+
+            ZStack {
+                tabTrack.allowsHitTesting(false).accessibilityHidden(true)
+
+                // One selected mark; its center travels between the exact cell centers.
+                // The glass belongs to the common track, not to separate tab buttons.
+                HStack(spacing: 0) {
+                    Color.clear.frame(width: rulesSelected ? half : 0, height: 0)
+                    Capsule().fill(m.accent.opacity(m.dark ? 0.23 : 0.15))
+                        .frame(width: max(0, half - 6), height: 38)
+                        .frame(width: half, height: 44)
+                    Spacer(minLength: 0)
+                }
+                .animation(reduceTabMotion ? nil : .spring(response: 0.28, dampingFraction: 0.88), value: rulesSelected)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+
+                HStack(spacing: 0) {
+                    tabItem("卦例", width: half, on: !rulesSelected) {
+                        s.tab = "cases"; s.detailId = ""; s.menuId = ""; s.ruleId = ""
+                    }
+                    tabItem("准则 \(s.rules.count)", width: half, on: rulesSelected) {
+                        s.tab = "rules"; s.detailId = ""; s.menuId = ""; s.ruleId = ""
+                    }
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
         }
-        .padding(.horizontal, 14)
+        .frame(height: 44)
+        .padding(.leading, 12)
+        .padding(.trailing, 10)
+        .padding(.bottom, 4)
     }
 
-    private func tabItem(_ label: String, on: Bool, tap: @escaping () -> Void) -> some View {
-        VStack(spacing: 0) {
+    @ViewBuilder
+    private var tabTrack: some View {
+        if #available(iOS 26.0, *) {
+            Color.clear.glassEffect(.regular, in: Capsule())
+        } else {
+            Capsule().fill(m.ctl)
+        }
+    }
+
+    private func tabItem(_ label: String, width: CGFloat, on: Bool, tap: @escaping () -> Void) -> some View {
+        Button(action: tap) {
             Text(label)
                 .font(.system(size: 12.5, weight: on ? .medium : .regular))
                 .foregroundColor(on ? m.ink : m.dim2)
-                .padding(.vertical, 8)
-            Rectangle()
-                .fill(on ? m.accent : Color.clear)
-                .frame(width: on ? 18 : 0, height: 2)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .padding(.horizontal, 6)
+                .frame(width: width, height: 44)
+                .contentShape(Rectangle())
         }
-        .contentShape(Rectangle())
-        .onTapGesture(perform: tap)
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 
     @ViewBuilder

@@ -10,9 +10,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import com.tencent.kuikly.compose.ui.layout.onSizeChanged
-import com.tencent.kuikly.compose.ui.platform.LocalDensity
 import com.tencent.kuikly.compose.ui.semantics.Role
 import com.tencent.kuikly.compose.foundation.selection.toggleable
+import com.tencent.kuikly.compose.foundation.Canvas
 import com.tencent.kuikly.compose.foundation.background
 import com.tencent.kuikly.compose.foundation.border
 import com.tencent.kuikly.compose.foundation.layout.size
@@ -38,7 +38,11 @@ import com.tencent.kuikly.compose.animation.core.animateFloatAsState
 import com.tencent.kuikly.compose.animation.core.tween
 import com.tencent.kuikly.compose.foundation.gestures.detectHorizontalDragGestures
 import com.tencent.kuikly.compose.foundation.layout.offset
+import com.tencent.kuikly.compose.ui.geometry.CornerRadius
+import com.tencent.kuikly.compose.ui.geometry.Offset
+import com.tencent.kuikly.compose.ui.geometry.Size
 import com.tencent.kuikly.compose.ui.graphics.Color
+import com.tencent.kuikly.compose.ui.graphics.drawscope.Stroke
 import com.tencent.kuikly.compose.ui.graphics.graphicsLayer
 import com.tencent.kuikly.compose.ui.input.pointer.pointerInput
 import com.tencent.kuikly.compose.extension.MakeKuiklyComposeNode
@@ -387,6 +391,19 @@ internal fun AboutPage() {
             }
             Spacer(modifier = Modifier.height(10.dp))
 
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(KY_LINE))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 10.dp)) {
+                    Text_(text = "回观", fontSize = 13.5f, lineHeight = 22f, weight = 500)
+                    Text_(text = "查看本周或本月卦例，仅在本机汇总。", fontSize = 11.5f,
+                        lineHeight = 18f, color = KY_DIM)
+                }
+                SetBtn(label = "打开回观", onClick = { IosRecall.openAbout() })
+            }
+
             /* ★ app 内更新（早期版本这一栏只有版本号 + 更新入口；简介/免责已搬「说明」栏） */
             if (Upd.available) {
                 Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(KY_LINE))
@@ -643,37 +660,52 @@ internal fun GlassSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
 private fun FogLevelControl() {
     val level = Skin.fogLevel
     val position = remember { Animatable(level.toFloat()) }
-    val scope = rememberCoroutineScope()
     var dragging by remember { mutableStateOf(false) }
-    var pull by remember { mutableStateOf(0f) }
+    var dragPosition by remember { mutableStateOf<Float?>(null) }
+    var request by remember { mutableStateOf(0) }
     val press by animateFloatAsState(if (dragging) 1f else 0f, tween(if (dragging) 100 else 420, easing = KY_EASE_OUT))
-    val stretch by animateFloatAsState(if (dragging) pull else 0f, tween(160, easing = KY_EASE_OUT))
-    var widthPx by remember { mutableStateOf(1f) }
-    val density = LocalDensity.current
+    var widthPx by remember { mutableStateOf(0f) }
     val latestLevel by rememberUpdatedState(level)
-    val shape = RoundedCornerShape(999.dp)
     val easing = com.tencent.kuikly.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
-    LaunchedEffect(level) {
-        if (!dragging) position.animateTo(level.toFloat(), tween(360, easing = easing))
+    LaunchedEffect(level, request, dragging) {
+        if (!dragging) {
+            // Seed the settle from the last actual finger position, even if drag end was in the same frame.
+            val from = dragPosition
+            if (from != null) {
+                position.snapTo(from)
+                if (dragging || dragPosition != from) return@LaunchedEffect
+                dragPosition = null
+            }
+            position.animateTo(level.toFloat(), tween(360, easing = easing))
+        }
     }
     fun settle(target: Int) {
         Skin.updateFogLevel(target)
-        scope.launch { position.animateTo(target.toFloat(), tween(360, easing = easing)) }
+        request++ // A canceled drag or retap may target the already selected stop.
     }
-    Box(Modifier.fillMaxWidth().height(42.dp).clip(shape)
-        .glassMaterial(shape, control = true)
-        .onSizeChanged { widthPx = it.width.toFloat().coerceAtLeast(1f) }
+
+    val visiblePosition = dragPosition ?: position.value
+    val trackFill = Skin.def.surface.copy(alpha = if (Skin.dark) .52f else .42f)
+    val trackLine = Skin.def.ink.copy(alpha = if (Skin.dark) .15f else .11f)
+    val thumbFill = KY_ACCENT.copy(alpha = if (Skin.dark) .25f + press * .05f else .13f + press * .05f)
+    val thumbLine = KY_ACCENT.copy(alpha = if (Skin.dark) .40f else .25f)
+    val activeInk = if (Skin.dark) KY_INK else KY_ACCENT
+    Box(Modifier.fillMaxWidth().height(42.dp)
+        .onSizeChanged { widthPx = it.width.toFloat() }
         .pointerInput(Unit) {
             detectHorizontalDragGestures(
-                onDragStart = { dragging = true; pull = 0f },
+                onDragStart = {
+                    dragPosition = dragPosition ?: position.value
+                    dragging = true
+                },
                 onHorizontalDrag = { _, amount ->
-                    pull = (amount / 18f).coerceIn(-1f, 1f)
-                    val next = (position.value + amount / (widthPx / 3f)).coerceIn(0f, 2f)
-                    scope.launch { position.snapTo(next) }
+                    if (widthPx > 0f) {
+                        dragPosition = ((dragPosition ?: position.value) + amount / (widthPx / 3f)).coerceIn(0f, 2f)
+                    }
                 },
                 onDragEnd = {
                     dragging = false
-                    settle(kotlin.math.round(position.value).toInt().coerceIn(0, 2))
+                    settle(kotlin.math.round(dragPosition ?: position.value).toInt().coerceIn(0, 2))
                 },
                 onDragCancel = {
                     dragging = false
@@ -682,24 +714,37 @@ private fun FogLevelControl() {
             )
         },
     ) {
-        val cell = with(density) { (widthPx / 3f).toDp() }
-        Box(Modifier.offset(x = cell * position.value + 3.dp, y = 3.dp)
-            .width((cell - 6.dp).coerceAtLeast(0.dp)).height(36.dp)
-            .graphicsLayer {
-                scaleX = 1f + 0.055f * press + 0.065f * kotlin.math.abs(stretch)
-                scaleY = 1f - 0.07f * press - 0.025f * kotlin.math.abs(stretch)
-                rotationZ = stretch * 1.2f
+        Canvas(Modifier.fillMaxSize()) {
+            if (size.width <= 0f || size.height <= 0f) return@Canvas
+            val keyline = .85.dp.toPx()
+            fun pill(x: Float, y: Float, w: Float, h: Float, fill: Color, line: Color) {
+                if (w <= 0f || h <= 0f) return
+                val radius = minOf(w, h) * .5f
+                drawRoundRect(fill, Offset(x, y), Size(w, h), CornerRadius(radius))
+                val stroke = minOf(keyline, radius * .5f)
+                val half = stroke * .5f
+                drawRoundRect(
+                    line, Offset(x + half, y + half), Size(w - stroke, h - stroke),
+                    CornerRadius(radius - half), style = Stroke(stroke),
+                )
             }
-            .clip(shape).glassMaterial(shape, control = true, pressed = press)
-            .background(KY_ACCENT.copy(alpha = 0.12f + 0.04f * press)))
+            pill(0f, 0f, size.width, size.height, trackFill, trackLine)
+            val cell = size.width / 3f
+            val inset = minOf(3.5.dp.toPx(), cell * .25f, size.height * .25f)
+            val thumbWidth = (cell - 2f * inset) * (1f - .025f * press)
+            val thumbHeight = (size.height - 2f * inset) * (1f - .06f * press)
+            val center = cell * (visiblePosition.coerceIn(0f, 2f) + .5f)
+            val left = (center - thumbWidth * .5f).coerceIn(inset, size.width - inset - thumbWidth)
+            pill(left, (size.height - thumbHeight) * .5f, thumbWidth, thumbHeight, thumbFill, thumbLine)
+        }
         Row(Modifier.fillMaxSize()) {
             listOf("静态雾景", "轻柔流动", "实时流雾").forEachIndexed { index, title ->
-                Box(Modifier.weight(1f).height(42.dp).clip(shape)
+                Box(Modifier.weight(1f).height(42.dp)
                     .clickable { settle(index) }, contentAlignment = Alignment.Center) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text_(title, fontSize = 12f, lineHeight = 20f,
                             weight = if (level == index) 600 else 400,
-                            color = if (level == index) KY_ACCENT else KY_DIM2)
+                            color = if (level == index) activeInk else KY_DIM2)
                     }
                 }
             }

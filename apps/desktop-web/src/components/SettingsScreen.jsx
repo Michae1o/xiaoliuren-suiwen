@@ -8,7 +8,7 @@
  *       （`pvValid / guessProv / missing / load / loadSvcs / …` 一律调 `SettingsCore`）。
  *
  * 规矩：
- *   · **照抄早期版本**（结构/类名/id/文字一字不改）；CSS 不在这边写（桌面端样式唯一样源 = legacy.css）。
+ *   · 非模型分区保留原有 DOM 和样式；模型分区采用用户确认后的摘要 / 展开编辑。
  *   · 文字一律走 **JSX 文本节点**，不用 `esc()` —— 等价性已在 `早期实现记录` 原记录 给出机制证明
  *     （早期版本 `esc()` + innerHTML 的最终文本节点 == React 文本节点；本项目文案全部落在该等价范围内）。
  *   · 每个状态驱动的属性/类名后面都标了**源行号**，便于逐条回溯。
@@ -20,18 +20,19 @@
  *   `#stAgain`/`#stStart`(L500-514) · `#stEye`(L847-851) · 三个输入框(L853-868) ·
  *   `#stWireD`/`#stWireP`(L869-874) · `#stSave`(L876-881) · `#stCaseExp`(L917-936) ·
  *   `#stCaseClr`(L938-943) · `#stReset`(L945-955)
- *   `#stKey` 失焦自动拉(L904-908) · `#stModels` 清单点击(L890-901) —— 见下面「出网两条」那一段
+ *   `#stModels` 清单点击(L890-901) —— 列表与连接只通过各自的按钮请求。
  *   （逐字照抄 `renderModels()` L583-605 / `pull()` L607-670 / `test()` L672-718）。
  *   ** 已落地（）**：`#stThemes` 点击(L910-915) + `renderThemes()`(L573-578)
  *   —— 走 `src/data/skinApply.js`（与  换皮肤面板**共用一份**， 已解）
  */
 import { useEffect, useRef, useState } from 'react';
+import modelSettingsCss from '../styles/modelSettings.css?inline';
 import { SettingsCore as C } from '../data/settingsCore.js';
 /* 「MCP接入」那一节：桥在 data/mcpBridge.js，这里只摆 DOM（见 McpSection.jsx 头注） */
 import McpSection from './McpSection.jsx';
 /* ★ 出网那两处（测试连接 / 拉模型）改走 llmEndpoint ——
    智谱官方地址在网页版与安卓上要换成本站中转；带 /anthropic 的地址要换请求形状。 */
-import { endpoint as epOf, headers as hdrsOf, payload as pyOf, textOf, errOf, resolveBase, isAnth, IS_TAURI } from '../data/llmEndpoint.js';
+import { endpoint as epOf, textOf, errOf, resolveBase, isAnth, IS_TAURI } from '../data/llmEndpoint.js';
 import { fetchLLM } from '../llm/llmFetch.js';
 /* ★ （要求）：「设置 → 常见问题」那一栏的条目，按平台过滤（本端专属 + 通用） */
 import { faqList } from '../data/faq.js';
@@ -65,7 +66,7 @@ function ProvButton({ k, n, note, rec, del, pv, got }) {
   );
 }
 
-export default function SettingsScreen({ open, onClose, preload }) {
+export default function SettingsScreen({ open, onClose, preload, onHuiguan }) {
   /* ★
   const PORTABLE = false;
   /* 打开时解析"当前在用的是哪家服务商" —— 逐字对应 open() 前的 wire() L758-761：
@@ -74,7 +75,6 @@ export default function SettingsScreen({ open, onClose, preload }) {
   const [pv, setPv] = useState(() => {
     let k = C.loadProv();
     if (!C.pvValid(k)) k = C.guessProv(C.load());
-    C.saveProv(k);
     return k;
   });
 
@@ -100,20 +100,41 @@ export default function SettingsScreen({ open, onClose, preload }) {
   /* `#stThemes` 点击（L910-915）：`window.XLR_SKIN_APPLY(data-k)` + `renderThemes()` */
   const onTheme = (k) => { applySkin(k); setSkin(k); };
 
-  /* ── 早期版本放在"模块级变量 / 活的 DOM"上的东西，React 里一律变成 state（对应关系见注释末尾） ──
-     每次「早期版本会调 render()」的地方 ⇒ 调 `renderLike()`：先按 L480 重新定 `pv`，再强制重画。
-     整屏派生值（状态卡三态 / 卡片 aria-current 与「已配置」/ stp3-5 的 off / 两句 hint /
-     卦例本则数 / 导出清空的 disabled / 连接方式 pri / 中转行 display / 字段值）都在下面 return 里
-     从 `C.load()` **现读** ⇒ **重画 == 早期版本 render() 的效果**。
-       `eyeOn` ⇐ `el.stKey.type` + `el.stEye.textContent`（L847-851）—— **唯一进 state 的**（React 要驱动 `type`）
-     ⚠ `#stMsg` 的 display/class/正文、`#stCustomRow` 的 display **不进 state**：早期版本是
-     `say()/quiet()`（L456-459）与 `showCustomRow()/hideCustomRow()`（L721-727）**直接改 DOM**
-     ⇒ JSX 侧照做（ref/getElementById 直接赋属性），源文件里那两个静态 `style="display:none"`
-     与静态 `class="stmsg"` **原样保留**。
-     `models`（早期版本 `var models = []`）本批不存在：**只有 pull()（出网，原记录① 留待）会填它**
-     ⇒ `#stModels` 保持静态 `none`。 */
+  // Models use an in-memory draft until 保存; the rest of Settings keeps
+  // its current lifecycle and existing local-store behavior.
   const [, setTick] = useState(0);
   const [eyeOn, setEyeOn] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [testState, setTestState] = useState(null);
+  const [saveNotice, setSaveNotice] = useState('');
+  const summaryRef = useRef(null);
+  const draft = useRef(null);
+  const testRun = useRef(0);
+  const pullRun = useRef(0);
+  const probeRun = useRef(0);
+  const readDraft = () => draft.current?.settings ?? C.load();
+  const savedProvider = () => {
+    const id = C.loadProv();
+    return C.pvValid(id) ? id : C.guessProv(C.load());
+  };
+  const trimmed = (value) => String(value ?? '').trim();
+  const configSignature = (v) => JSON.stringify([trimmed(v.base), trimmed(v.key), trimmed(v.model),
+    v.wire, v.wire === 'proxy' ? trimmed(v.proxy) : '']);
+  const writeDraft = (next) => {
+    if (!draft.current) return;
+    const old = draft.current.settings;
+    if (trimmed(old.base) !== trimmed(next.base) || trimmed(old.key) !== trimmed(next.key) ||
+        old.wire !== next.wire || trimmed(old.proxy) !== trimmed(next.proxy)) clearModels();
+    draft.current.settings = next;
+  };
+  const clearModels = () => {
+    pullRun.current++;
+    modelsRef.current = [];
+    const box = modelsBoxRef.current;
+    if (box) { box.innerHTML = ''; box.style.display = 'none'; }
+    if (pullRef.current) { pullRef.current.disabled = false; pullRef.current.textContent = '拉取可用模型'; }
+    if (pullHintRef.current) pullHintRef.current.textContent = '连接服务商后列出可用模型，也可以手动填写。';
+  };
   /* ★ （现象：「本地没部署 qwen，点 Ollama 却说我已配置」）：
      null = 正在探 / 还没探；true = 那台「本机模型」真在跑；false = 连不上。
      只对**本地地址**（localhost / 127.0.0.1）用；云端各家不探（白花请求、还容易被限流）。 */
@@ -159,16 +180,7 @@ export default function SettingsScreen({ open, onClose, preload }) {
        带 `<code>`/`<br>` 的提示语都在出网路径（留待），与本批无关。 */
   };
   const quiet = () => { const m = msgRef.current; if (m) m.style.display = 'none'; };    /* L461 */
-  const syncSvc = () => {                                             /* L95 */
-    const s2 = C.load();
-    C.svcPut(pv, { base: s2.base, model: s2.model, key: s2.key });
-  };
-  const renderLike = () => {                                          /* L478 */
-    let k = pv;
-    if (!C.pvValid(k)) k = C.guessProv(C.load());                     /* L480 */
-    if (k !== pv) setPv(k);
-    setTick(t => t + 1);
-  };
+  const renderLike = () => setTick(t => t + 1);
 
   /* ---------- 出网两条：拉取可用模型 / 测试连接（★ 接线，用户「第二条接」）----------
      逐条照抄 `36-script.txt`：`renderModels()` L583-605 · `pull()` L607-670 · `test()` L672-718 ·
@@ -182,7 +194,7 @@ export default function SettingsScreen({ open, onClose, preload }) {
     const box = modelsBoxRef.current;
     if (!box) return;
     if (!modelsRef.current.length) { box.style.display = 'none'; return; }
-    const s2 = C.load();
+    const s2 = readDraft();
     let h = '<div class="mh"><span class="n">共 ' + modelsRef.current.length + ' 个</span>' +
       '<input type="text" id="stMF" placeholder="输入几个字过滤…" spellcheck="false"></div><div class="ml">';
     for (let i = 0; i < modelsRef.current.length; i++) {
@@ -209,19 +221,25 @@ export default function SettingsScreen({ open, onClose, preload }) {
        ③ 保存只写 localStorage、从不验证连通 ⇒ 永远报「已保存」。
      ⇒ 补一次**真探**：GET `<base>/models`（Ollama 的 OpenAI 兼容口子也认这个），通了才算在跑。
        只探本地地址；云端各家照旧不探（那会白花一次请求，也容易被限流）。 */
-  const isLocalBase = (base) => /localhost|127\.0\.0\.1/.test(String(base || ''));
+  const isLocalBase = (base) => {
+    try { return ['localhost', '127.0.0.1', '[::1]'].includes(new URL(base).hostname); }
+    catch { return false; }
+  };
   /* 打开设置页 / 换服务商时探一次（只探本地地址） */
   useEffect(() => {
     if (!open) return;
     const s2 = C.load();
-    if (isLocalBase(s2.base)) probeLocal(s2); else setLocalUp(null);
-  }, [open, pv]);
+    if (isLocalBase(s2.base)) probeLocal(s2);
+    else { probeRun.current++; setLocalUp(null); }
+    return () => { probeRun.current++; };
+  }, [open]);
   const probeLocal = (s2, cb) => {
     const base = String((s2 && s2.base) || '').replace(/\/+$/, '');
     if (!base) { setLocalUp(false); if (cb) cb(false); return; }
+    const run = ++probeRun.current;
     setLocalUp(null);
     let done = false;
-    const fin = (up) => { if (done) return; done = true; setLocalUp(up); if (cb) cb(up); };
+    const fin = (up) => { if (done || run !== probeRun.current) return; done = true; setLocalUp(up); if (cb) cb(up); };
     const t = setTimeout(() => fin(false), 6000);
     try {
       fetch(resolveBase(base) + '/models', { method: 'GET' })
@@ -231,11 +249,11 @@ export default function SettingsScreen({ open, onClose, preload }) {
   };
 
   const pull = () => {                                                /* L607-670，逐字同构 */
-    const s2 = C.load();
+    const s2 = readDraft();
     const base = String(s2.base || '').replace(/\/+$/, '');
     const pb = pullRef.current, hint = pullHintRef.current, box = modelsBoxRef.current;
     if (!base) { say('bad', '先把接口地址填上——或者在上面点一个服务商。'); return; }
-    if (s2.wire === 'direct' && !s2.key && !/localhost|127\.0\.0\.1/.test(base)) {
+    if (s2.wire === 'direct' && !s2.key && !isLocalBase(base)) {
       say('bad', '拉清单要带上 Key，先在第 3 步把 Key 填上。'); return;
     }
     if (pb) { pb.disabled = true; pb.textContent = '拉取中…'; }
@@ -244,6 +262,7 @@ export default function SettingsScreen({ open, onClose, preload }) {
     modelsRef.current = [];
     if (box) box.style.display = 'none';
 
+    const run = ++pullRun.current;
     let p;
     if (s2.wire === 'proxy') {
       /* 走本地中转：让它替我们 GET /models */
@@ -259,6 +278,7 @@ export default function SettingsScreen({ open, onClose, preload }) {
     }
 
     p.then((r) => {
+      if (run !== pullRun.current) return;
       if (!r.ok) throw new Error('HTTP ' + r.st + ' ' + String(r.t).slice(0, 180));
       const j = JSON.parse(r.t);
       const arr = (j && j.data) || (j && j.models) || [];
@@ -277,7 +297,8 @@ export default function SettingsScreen({ open, onClose, preload }) {
       return null;
     })
       .catch((e) => {
-        const why = C.esc(String(e.message || e).slice(0, 170));
+        if (run !== pullRun.current) return;
+        const why = C.esc(String(e.message || e).replaceAll(s2.key || '\u0000', '[已隐藏]').slice(0, 170));
         /* ★ 本地地址**不许**回退内置清单 —— 那份清单是写死的（qwen2.5:7b 等），
            本机没装 Ollama 时它会假装「拉到了」，用户以为配好了，等解卦才报连不上。
            ⇒ 本地这条直接把「怎么把它跑起来」说清楚。 */
@@ -288,7 +309,7 @@ export default function SettingsScreen({ open, onClose, preload }) {
             '③ 再点一次「拉取可用模型」。');
           return;
         }
-        const fb = C.FALLBACK[C.guessProv(C.load())] || [];
+        const fb = C.FALLBACK[C.guessProv(s2)] || [];
         if (fb.length) {
           renderModels(fb, '这是<b>内置</b>的常用清单——没能拉到这家的实时列表。可以直接在下面手填模型名，或换个时间再拉。');
           if (hint) hint.textContent = '没拉成，先给你一份常用清单。';
@@ -299,17 +320,20 @@ export default function SettingsScreen({ open, onClose, preload }) {
         }
       })
       .then(() => {
-        if (pb) { pb.disabled = false; pb.textContent = '拉取可用模型'; }
+        if (pb && run === pullRun.current) { pb.disabled = false; pb.textContent = '拉取可用模型'; }
       });
   };
 
   const test = () => {                                                /* L672-718，逐字同构 */
-    const s2 = C.load();
-    C.save(s2);                        // 先把当前输入落盘，测的就是这份
+    if (!draft.current) return;
+    const s2 = normalizedDraft();
     const bad = C.missing(s2);
     if (bad) { say('bad', C.esc(bad)); return; }
 
     const ep = epOf(s2), t0 = Date.now();
+    const sig = configSignature(s2), run = ++testRun.current;
+    const currentRun = () => run === testRun.current;
+    setTestState({ sig, outcome: 'running' });
     const tb = testRef.current;
     if (tb) { tb.disabled = true; tb.textContent = '测试中…'; }
     say('', '正在连这家服务商…');
@@ -322,16 +346,22 @@ export default function SettingsScreen({ open, onClose, preload }) {
           try { hint = errOf(JSON.parse(r.t)); } catch (e) { hint = ''; }
           throw new Error('HTTP ' + r.st + (hint ? ' · ' + hint.slice(0, 90) : ' ' + String(r.t).slice(0, 220)));
         }
+        if (!currentRun()) return;
         const j = JSON.parse(r.t);
-        const c = textOf(j) || '(空响应)';
+        const c = String(textOf(j) || '').trim();
+        if (!c || j?.error) throw new Error('服务商没有返回模型正文。');
+        setTestState({ sig, outcome: 'pass' });
+        if (configSignature(readDraft()) !== sig) return;
         say('good', '✓ 通了。用时 ' + (Date.now() - t0) + ' 毫秒，模型回：<code>' +
-          C.esc(String(c).trim().slice(0, 40)) + '</code>');
+          C.esc(String(c).replaceAll(s2.key || '\u0000', '[已隐藏]').trim().slice(0, 40)) + '</code>');
         renderLike();
-        const st5 = document.getElementById('stp5');
-        if (st5) st5.className = 'step';
+
       })
       .catch((e) => {
-        const m = C.esc(String(e.message || e));
+        if (!currentRun()) return;
+        setTestState({ sig, outcome: 'fail' });
+        if (configSignature(readDraft()) !== sig) return;
+        const m = C.esc(String(e.message || e).replaceAll(s2.key || '\u0000', '[已隐藏]'));
         /* ★ （已定的口径）：不解释机制，只说下一步 ——
            「无法连接。请检查网络设置，或更换供应商。」
            网络层失败不把 Failed to fetch 甩给用户；HTTP 错误（Key 错/余额）留服务商原话。
@@ -341,7 +371,7 @@ export default function SettingsScreen({ open, onClose, preload }) {
           '请检查网络设置，或更换供应商。');
       })
       .then(() => {
-        if (tb) { tb.disabled = false; tb.textContent = '测试连接'; }
+        if (tb && currentRun()) { tb.disabled = false; tb.textContent = '测试连接'; }
       });
   };
 
@@ -349,9 +379,7 @@ export default function SettingsScreen({ open, onClose, preload }) {
   const onModelsClick = (e) => {
     const b = e.target && e.target.closest ? e.target.closest('.mi') : null;
     if (!b) return;
-    const s2 = C.load();
-    s2.model = b.getAttribute('data-m');
-    C.save(s2);
+    writeDraft({ ...readDraft(), model: b.getAttribute('data-m') });
     const box = modelsBoxRef.current;
     if (box) {
       [].forEach.call(box.querySelectorAll('.mi'), (x) => {
@@ -359,13 +387,6 @@ export default function SettingsScreen({ open, onClose, preload }) {
       });
     }
     quiet(); renderLike();
-  };
-
-  /* L904-908：Key 一离开输入框就自动拉一次（还没拉过的话） */
-  const onKeyBlur = () => {
-    if (modelsRef.current.length) return;
-    const s2 = C.load();
-    if (s2.key || /localhost|127\.0\.0\.1/.test(s2.base || '')) pull();
   };
 
   /* ★ 接线一律走**原生监听**（照早期版本 `el.stPull.addEventListener` 那一套），**不在 JSX 上加 `ref`/`onClick`**：
@@ -377,26 +398,29 @@ export default function SettingsScreen({ open, onClose, preload }) {
     modelsBoxRef.current = document.getElementById('stModels');
     pullHintRef.current = document.getElementById('stPullHint');
     const pb = pullRef.current, tb = testRef.current, box = modelsBoxRef.current;
-    const k = document.getElementById('stKey');                   /* L904-908 */
     if (pb) pb.addEventListener('click', pull);
     if (tb) tb.addEventListener('click', test);
     if (box) box.addEventListener('click', onModelsClick);        /* L890-901 清单点击 */
-    if (k) k.addEventListener('blur', onKeyBlur);                 /* L904-908 失焦自动拉 */
     return () => {
       if (pb) pb.removeEventListener('click', pull);
       if (tb) tb.removeEventListener('click', test);
       if (box) box.removeEventListener('click', onModelsClick);
-      if (k) k.removeEventListener('blur', onKeyBlur);
     };
   }, [open]);
-  /* 三个输入框共用：`save(s); syncSvc(); quiet(); render();`（L853-861，逐字同构） */
   const onField = (field) => (e) => {
-    const s2 = C.load();
-    s2[field] = e.target.value.trim();
-    C.save(s2); syncSvc(); quiet(); renderLike();
+    if (field === 'key' && draft.current) draft.current.keyEdited = true;
+    writeDraft({ ...readDraft(), [field]: e.target.value });
+    quiet(); renderLike();
+  };
+  const normalizedDraft = () => {
+    const cfg = { ...readDraft() };
+    for (const field of ['base', 'model', 'key', 'proxy']) cfg[field] = String(cfg[field] || '').trim();
+    const temp = Number.parseFloat(cfg.temp);
+    cfg.temp = Number.isFinite(temp) ? Math.min(2, Math.max(0, temp)) : 0.5;
+    return cfg;
   };
 
-  /* ---------- 事件（逐条照抄 36-script.txt） ---------- */
+  /* ---------- 事件 ---------- */
   const onGuide = () => {                                             /* L748-757 */
     try { localStorage.removeItem('xlr-onboarded-2'); } catch (e) { }
     /* ★ （现象：：「点了只有提醒，页面还是设置页」）：legacy 的引导层 `.onb` z-index = **90**
@@ -424,126 +448,121 @@ export default function SettingsScreen({ open, onClose, preload }) {
     const r = document.getElementById('stCustomRow');
     if (r) r.style.display = 'none';
   };
-  const customCreate = () => {                                        /* L728-744 */
-    const n = nameRef.current ? nameRef.current.value.trim() : '';
-    if (!n) { say('bad', '先给它起个名字（比如 gemini）。'); if (nameRef.current) nameRef.current.focus(); return; }
-    const k = 'u' + Date.now().toString(36);
-    const cc = C.loadCustoms(); cc.push({ k: k, n: n }); C.saveCustoms(cc);
-    const s2 = C.load();
-    if (s2.base) C.svcPut(pv, { base: s2.base, model: s2.model, key: s2.key });
-    setPv(k); C.saveProv(k);
-    s2.base = ''; s2.model = ''; s2.key = '';
-    C.save(s2);
-    if (nameRef.current) nameRef.current.value = '';
-    hideCustomRow();
-    quiet(); renderLike();
-    pending.current = () => {                                         /* L741-743：滚到第 2 步 + 聚焦 */
-      const st2 = document.getElementById('stp2');
-      if (st2) { try { st2.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { } }
-      if (baseRef.current) baseRef.current.focus();
-    };
-    say('good', '✓ 已建好「' + n + '」：往下填接口地址 → Key → 模型，最后「测试连接」。');
+  const chooseProvider = (provider) => {
+    const d = draft.current;
+    if (!d || d.provider === provider.k) return;
+    d.edits.set(d.provider, normalizedDraft());
+    const previous = readDraft();
+    const mine = d.edits.get(provider.k) || C.svcGet(provider.k);
+    writeDraft(mine ? { ...previous, ...mine, wire: provider.local ? 'direct' : mine.wire || previous.wire } :
+      { ...previous, base: provider.base || '', model: provider.model || '', key: '', wire: provider.local ? 'direct' : previous.wire });
+    clearModels();
+    d.provider = provider.k;
+    setPv(provider.k);
+    d.keyEdited = false;
+    setEyeOn(false);
+    quiet(); hideCustomRow(); renderLike();
   };
-  const onProvsClick = (e) => {                                       /* L796-844 */
-    const del = e.target.closest ? e.target.closest('.prov-del') : null;
-    if (del) {                                                        /* L798-816 ✕ 删自定义家 */
+  const customCreate = () => {
+    const d = draft.current;
+    const n = nameRef.current?.value.trim();
+    if (!d) return;
+    if (!n) { say('bad', '先给它起个名字。'); nameRef.current?.focus(); return; }
+    const custom = { k: 'u' + Date.now().toString(36), n };
+    d.customs = [...d.customs, custom];
+    if (nameRef.current) nameRef.current.value = '';
+    chooseProvider(custom);
+    pending.current = () => baseRef.current?.focus();
+    say('good', '已添加「' + C.esc(n) + '」。填写地址、Key 和模型后，点保存。');
+  };
+  const onProvsClick = (e) => {
+    const d = draft.current;
+    if (!d) return;
+    const del = e.target.closest?.('.prov-del');
+    if (del) {
       e.stopPropagation();
       const dk = del.getAttribute('data-del');
-      let cc = null;
-      C.loadCustoms().forEach((x) => { if (x.k === dk) cc = x; });
-      if (!cc) return;
-      if (!window.confirm('删掉自定义服务商「' + cc.n + '」？它存下的地址和 Key 一起清掉，不能撤销。')) return;
-      C.saveCustoms(C.loadCustoms().filter((x) => x.k !== dk));
-      const mm2 = C.loadSvcs(); if (mm2[dk]) { delete mm2[dk]; C.saveSvcs(mm2); }
-      if (pv === dk) {
-        setPv('deepseek'); C.saveProv('deepseek');
-        const ds = C.svcGet('deepseek'); const s3 = C.load();
-        if (ds) { s3.base = ds.base; s3.model = ds.model; s3.key = ds.key; }
-        C.save(s3);
-      }
-      say('good', '✓ 已删掉「' + cc.n + '」。');
+      const custom = d.customs.find(x => x.k === dk);
+      if (!custom || !window.confirm('移除自定义服务商「' + custom.n + '」？保存后会清掉它的地址和 Key。')) return;
+      d.customs = d.customs.filter(x => x.k !== dk);
+      d.removed.add(dk);
+      if (d.provider === dk) chooseProvider(C.PROVS.find(x => x.k === 'deepseek'));
       renderLike();
       return;
     }
-    const b = e.target.closest ? e.target.closest('.prov') : null;    /* L817-844 选一家 */
-    if (!b) return;
-    const k2 = b.getAttribute('data-p');
-    if (k2 === 'custom') { showCustomRow(); return; }                 /* L820-824 */
-    let p = null;
-    for (let i = 0; i < C.PROVS.length; i++) if (C.PROVS[i].k === k2) p = C.PROVS[i];
-    if (!p) C.loadCustoms().forEach((x) => { if (x.k === k2) p = x; });
-    if (!p) return;
-    hideCustomRow();
-    const s2 = C.load();
-    if (s2.base) C.svcPut(pv, { base: s2.base, model: s2.model, key: s2.key });   /* L833 */
-    setPv(p.k); C.saveProv(p.k);
-    const mine = C.svcGet(p.k);
-    if (mine) { s2.base = mine.base; s2.model = mine.model; s2.key = mine.key; }
-    else { s2.base = p.base || ''; s2.model = p.model || ''; s2.key = ''; }
-    if (p.local) s2.wire = 'direct';
-    C.save(s2);
-    quiet(); renderLike();
-    /* L842-844：`models = []; el.stModels.style.display = 'none'; if (s.key || p.local) pull();`
-       ⇒ 清单清空已由 `models` 恒空体现；**`pull()` 出网，按 原记录① 留待（本批不调）**。 */
+    const k = e.target.closest?.('.prov')?.getAttribute('data-p');
+    if (k === 'custom') { showCustomRow(); return; }
+    const provider = C.PROVS.find(x => x.k === k) || d.customs.find(x => x.k === k);
+    if (provider) chooseProvider(provider);
   };
-  const onAgain = () => {                                            /* L500-509 */
-    const w = wizRef.current; if (!w) return;
-    w.style.display = '';
-    try { w.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) { }
-    const old = w.style.outline;
-    w.style.outline = '2px solid var(--accent)';
-    setTimeout(() => { if (wizRef.current) wizRef.current.style.outline = old; }, 1000);
+  const openEditor = (focusKey = false) => {
+    if (!draft.current) {
+      const provider = savedProvider();
+      draft.current = { settings: C.load(), provider, customs: C.loadCustoms(), edits: new Map(), removed: new Set() };
+      setPv(provider);
+      clearModels();
+    }
+    setSaveNotice('');
+    pending.current = () => (focusKey ? keyRef : wizRef).current?.focus({ preventScroll: true });
+    setEditorOpen(true);
+    renderLike();
   };
-  const onStart = () => {                                            /* L510-514 */
-    const w = wizRef.current; if (!w) return;
-    w.style.display = '';
-    try { w.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { }
+  const closeEditor = () => {
+    draft.current = null;
+    clearModels();
+    quiet(); hideCustomRow();
+    setPv(savedProvider());
+    setEyeOn(false);
+    setEditorOpen(false);
+    pending.current = () => summaryRef.current?.focus({ preventScroll: true });
+    renderLike();
   };
-  const onEye = () => {                                              /* L847-851 */
-    const on = keyRef.current && keyRef.current.type === 'password';
-    if (keyRef.current) keyRef.current.type = on ? 'text' : 'password';
-    setEyeOn(!!on);
-  };
-  const onTemp = (e) => {                                            /* L862-865 */
-    const s2 = C.load(); const v = parseFloat(e.target.value);
-    s2.temp = isNaN(v) ? 0.5 : Math.min(2, Math.max(0, v)); C.save(s2);
-  };
-  const onProxy = (e) => {                                           /* L866-868 */
-    const s2 = C.load(); s2.proxy = e.target.value.trim(); C.save(s2); quiet();
-  };
-  /* ★ （要求）：智谱的地址一键切换 ——
-     标准 API 走 `api/paas/v4`，token plan（编码套餐）走 `api/anthropic`（Claude 协议，软件自己认地址换形状）。
-     点「这里」就换一次、记住；再点一次换回来。 */
+  useEffect(() => {
+    const w = wizRef.current;
+    if (!w) return;
+    const focusKey = () => openEditor(true);
+    // Guide's existing click path opens Settings and can select a provider
+    // synchronously. Prepare the draft before that selection; let the shell
+    // retain ownership of opening Settings and its original scroll landing.
+    const guideClick = (e) => {
+      const go = e.target.closest?.('#gNext');
+      if (go?.textContent.trim() === '去配置') focusKey();
+    };
+    w.addEventListener('xlr-guide-edit-model', focusKey);
+    document.addEventListener('click', guideClick, true);
+    return () => {
+      w.removeEventListener('xlr-guide-edit-model', focusKey);
+      document.removeEventListener('click', guideClick, true);
+    };
+  }, [open]);
+  const onEye = () => setEyeOn(v => !v);
+  const onTemp = onField('temp');
+  const onProxy = onField('proxy');
   const onZipToggle = (e) => {
-    if (e && e.preventDefault) e.preventDefault();
-    const s2 = C.load();
-    s2.base = isAnth(s2.base)
-      ? 'https://open.bigmodel.cn/api/paas/v4'
-      : 'https://open.bigmodel.cn/api/anthropic';
-    C.save(s2);
-    if (baseRef.current) baseRef.current.value = s2.base;   /* ← 输入框是 defaultValue 非受控，得手动改 */
-    renderLike();
+    e.preventDefault();
+    writeDraft({ ...readDraft(), base: isAnth(readDraft().base)
+      ? 'https://open.bigmodel.cn/api/paas/v4' : 'https://open.bigmodel.cn/api/anthropic' });
+    quiet(); renderLike();
   };
-  const onWire = (w) => () => {                                      /* L869-874 */
-    const s2 = C.load(); s2.wire = w; C.save(s2); renderLike();
+  const onWire = (wire) => () => {
+    writeDraft({ ...readDraft(), wire }); quiet(); renderLike();
   };
-  const onSave = () => {                                             /* L876-881 */
-    const s2 = C.load();
+  const onSave = () => {
+    const d = draft.current;
+    if (!d) return;
+    const s2 = normalizedDraft();
     C.save(s2);
-    /* ★ 本地地址保存后**当场探一次**再说「成功」——
-       原来只写 localStorage 就报「已保存」，用户没装 Ollama 也会以为配好了（解卦时才报连不上）。 */
-    if (isLocalBase(s2.base)) {
-      say('', '已保存，正在检查本机模型…');
-      probeLocal(s2, (up) => {
-        say(up ? 'good' : 'bad', up
-          ? '✓ 已保存，本机的本地模型是在跑的。回到主界面点「让模型解卦」就能用。'
-          : '已保存，但本机这个地址（' + C.esc(s2.base) + '）连不上 —— 本地模型没装或没启动，现在还解不了卦。');
-      });
-      renderLike();
-      return;
-    }
-    say('good', '✓ 已保存。回到主界面点「让模型解卦」就会用它。');
-    renderLike();
+    C.saveCustoms(d.customs);
+    const providers = C.loadSvcs();
+    for (const id of d.removed) delete providers[id];
+    for (const [id, v] of d.edits) if (!d.removed.has(id) && v.base) providers[id] = { base: v.base, model: v.model, key: v.key };
+    providers[d.provider] = { base: s2.base, model: s2.model, key: s2.key };
+    C.saveSvcs(providers);
+    C.saveProv(d.provider);
+    closeEditor();
+    setSaveNotice('已保存');
+    if (isLocalBase(s2.base)) probeLocal(s2);
+    else { probeRun.current++; setLocalUp(null); }
   };
   /* ★ 「导出按钮后面都加一个打开导出文件夹」。
      记下最后一次真正落盘的路径 —— 点了就让资源管理器选中它；没导出过就开「下载」目录。 */
@@ -794,31 +813,32 @@ export default function SettingsScreen({ open, onClose, preload }) {
     );
   };
 
-  /* ★ 一键把这页填过的东西全清掉。
-     ⚠ 输入框是**非受控**的（defaultValue + ref）⇒ 清完必须手工把 5 个框写回默认值，
-        否则屏幕上还留着旧字，看着像没清。 */
+  // Clear only the model configuration with the established SettingsCore operation.
   const onClearAll = () => {
     if (!window.confirm('清空模型配置？服务商、接口地址、Key、模型名都会删掉，之后要重新填一遍。')) return;
     C.clearAll();
-    const d = C.load();
-    if (baseRef.current) baseRef.current.value = d.base;
-    if (keyRef.current) keyRef.current.value = PORTABLE ? '' : d.key;
-    if (modelRef.current) modelRef.current.value = d.model;
-    if (tempRef.current) tempRef.current.value = d.temp;
-    if (proxyRef.current) proxyRef.current.value = d.proxy;
-    modelsRef.current = [];
-    if (modelsBoxRef.current) { modelsBoxRef.current.innerHTML = ''; modelsBoxRef.current.style.display = 'none'; }
-    setPv(C.guessProv(d));
-    renderLike();
-    say('good', '✓ 模型配置已清空，可以重新配一家。');
+    testRun.current++;
+    probeRun.current++;
+    if (testRef.current) { testRef.current.disabled = false; testRef.current.textContent = '测试连接'; }
+    setLocalUp(null);
+    setTestState(null);
+    closeEditor();
+    setSaveNotice('模型配置已清空');
   };
 
-  const s = C.load();                 /* L479 */
-  const bad = C.missing(s);           /* L481 */
-  const ok = !bad;                    /* L482 */
-  /* ★ 本地预设（没 Key + 地址是本机）要**真探过**才敢说「已配置」 */
+  const s = readDraft();
+  const ok = !C.missing({ ...s, base: trimmed(s.base), model: trimmed(s.model), key: trimmed(s.key) });
   const localOnly = ok && !s.key && isLocalBase(s.base);
-  const customs = C.loadCustoms();    /* gridHtml() 里那一支 */
+  const status = testState?.sig === configSignature(s) ? testState.outcome : null;
+  const summaryStatus = !ok ? '配置未完成' :
+    status === 'pass' ? '配置已填写 · 测试已通过' :
+    status === 'running' ? '配置已填写 · 正在测试' :
+    status === 'fail' ? '配置已填写 · 上次测试未通过' :
+    localOnly && !editorOpen && localUp === true ? '本机地址可访问 · 未测试模型' :
+    localOnly && !editorOpen && localUp === false ? '配置已填写 · 本机地址不可访问' :
+    localOnly && !editorOpen ? '配置已填写 · 正在检查本机地址' :
+    '配置已填写 · 未测试连接';
+  const customs = draft.current?.customs ?? C.loadCustoms();
   let caseN = 0;
   try { caseN = (JSON.parse(localStorage.getItem(C.KEYS.cases) || '[]') || []).length; } catch (e) { caseN = 0; }  /* L566-567 */
   /* ★ （要求）：准则条数 —— 与 caseN 一样现读，renderLike() 之后自动跟上 */
@@ -846,6 +866,15 @@ export default function SettingsScreen({ open, onClose, preload }) {
          （见 onGuide 的 ★ 注：只在设置页里点「重看引导」时才抬到 640）。 */
       const ob = document.getElementById('onbLayer');
       if (ob) ob.style.zIndex = '';
+      draft.current = null;
+      setEditorOpen(false);
+      setEyeOn(false);
+      setSaveNotice('');
+      setPv(savedProvider());
+      clearModels();
+      testRun.current++;
+      if (testRef.current) { testRef.current.disabled = false; testRef.current.textContent = '测试连接'; }
+      setTestState(v => v?.outcome === 'running' ? null : v);
     }
     return () => { de.style.overflow = ''; de.classList.remove('set-lock'); };
   }, [open]);
@@ -857,18 +886,7 @@ export default function SettingsScreen({ open, onClose, preload }) {
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  /* L517-519：`render()` 每次都把字段值从存档写回输入框（早期版本就这么做，含 trim 归一）
-     ＋ 提交后补 DOM 副作用（滚动 / 聚焦 / 闪高亮）。
-     ⚠ **故意无依赖数组 = 每次重画都跑**，与早期版本"render() 会重写 .value"逐字一致。 */
   useEffect(() => {
-    const s2 = C.load();
-    if (baseRef.current) baseRef.current.value = s2.base;
-    if (modelRef.current) modelRef.current.value = s2.model;
-    if (keyRef.current) keyRef.current.value = PORTABLE ? '' : s2.key;
-    if (tempRef.current) tempRef.current.value = s2.temp;
-    if (proxyRef.current) proxyRef.current.value = s2.proxy;
-    const pr = document.getElementById('stProxyRow');                  /* L563 */
-    if (pr) pr.style.display = s2.wire === 'proxy' ? '' : 'none';
     const f = pending.current;
     if (f) { pending.current = null; f(); }
   });
@@ -919,6 +937,7 @@ export default function SettingsScreen({ open, onClose, preload }) {
   const cur = C.PROVS.find(x => x.k === pv) || null;
   return (
     <div className={'setscreen' + (open ? ' on' : '')} id="setScreen">
+      <style>{modelSettingsCss}</style>
       <div className="sethead">
         <button className="bk" type="button" id="setBack" onClick={onClose}>← 返回</button>
         <span className="ttl">设置</span>
@@ -940,27 +959,28 @@ export default function SettingsScreen({ open, onClose, preload }) {
             <section className="setsec" id="s-llm">
               <h3>大模型</h3>
               <p className="lead">解卦本身不联网：起卦、排盘、断卦依据都在本机算。配上模型，点「让模型解卦」直接出断辞。</p>
-              <div className="sbtnrow" style={{ margin: '14px 0 22px' }}>
+              <div className="smr-summary" id="stCard">
+                <button type="button" id="stAgain" className="smr-config" ref={summaryRef}
+                  onClick={() => editorOpen ? closeEditor() : openEditor()}
+                  aria-controls="stModelEditor" aria-expanded={editorOpen} aria-describedby="stSummaryState">
+                  <span className="smr-what"><strong>模型配置</strong>
+                    <span className="smr-status" id="stSummaryState" role="status">
+                      <i aria-hidden="true" data-state={status === 'pass' ? 'pass' : status === 'fail' ? 'fail' : 'neutral'} />
+                      {summaryStatus}{saveNotice ? ' · ' + saveNotice : ''}
+                    </span>
+                  </span>
+                  <span className="smr-value"><strong>{s.model || '尚未选择模型'}</strong>
+                    <span>{C.PROVS.find(x => x.k === pv)?.n || customs.find(x => x.k === pv)?.n || '填写服务商与模型'}</span>
+                  </span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="m9 5 7 7-7 7" /></svg>
+                </button>
+              </div>
+              <div className="smr-links">
                 <button className="sbtn" type="button" id="stGuide" onClick={onGuide}>重新看配置引导（图文）</button>
-                <span className="hint" style={{ margin: '0', alignSelf: 'center' }}>不知道去哪申请 Key？点这个，一步步来。</span>
+                {localOnly && !editorOpen && <button className="sbtn" type="button" id="stRecheck" onClick={() => probeLocal(C.load())}>重新检查本机地址</button>}
               </div>
-              {/* L484–L499：状态卡三态。**内容全部由 localStorage 决定**（运行期填充）⇒ 按 原记录 的分工，
-                  它不在结构核对器管辖内，由比对 06-settings 负责；这里的文字/结构与早期版本逐字相同
-                  （`esc()` 走的是 JSX 文本节点，等价性见 原记录）。 */}
-              <div className={'stcard' + (ok && (!localOnly || localUp === true) ? ' ok' : '')} id="stCard">
-                {ok && s.key ? (
-                  <><span className="dot"></span><div className="m"><b>{'已配置 · ' + s.model}</b><p>{s.base + '　·　' + (s.wire === 'proxy' ? '本地中转' : '浏览器直连')}</p></div><button className="sbtn" type="button" id="stAgain" onClick={onAgain}>重新配置</button></>
-                ) : localOnly && localUp !== true ? (
-                  <><span className="dot"></span><div className="m"><b>{localUp === false ? '连不上这台本机服务' : '正在检查本机…'}</b>
-                    <p>{localUp === false ? (s.base + ' 连不上：服务没起来，或地址写错了。它起来之后再点「重新检查」。') : s.base}</p></div>
-                    <button className="sbtn" type="button" id="stRecheck" onClick={() => probeLocal(C.load())}>重新检查</button></>
-                ) : ok ? (
-                  <><span className="dot"></span><div className="m"><b>{'已配置 · ' + s.model}</b><p>{s.base}</p></div><button className="sbtn" type="button" id="stAgain" onClick={onAgain}>重新配置</button></>
-                ) : (
-                  <><span className="dot"></span><div className="m"><b>还没配模型</b><p>{bad + '跟着下面走，一分钟就能好。'}</p></div><button className="sbtn pri" type="button" id="stStart" onClick={onStart}>开始配置</button></>
-                )}
-              </div>
-              <div className="steps" id="stWiz" ref={wizRef}>
+              <div id="stModelEditor" hidden={!editorOpen}>
+              <div className="steps" id="stWiz" ref={wizRef} tabIndex={-1} aria-label="编辑模型配置">
                 <div className="step" id="stp1"><span className="no">1</span><span className="cn">选一个服务商</span>
                   <div className="bd"><div className="provs" id="stProvs" onClick={onProvsClick}>
                     {/* `gridHtml()` L69–L77 的**顺序**：内置各家（不含 custom）→ 自定义各家 → 「自定义」入口卡。
@@ -977,57 +997,59 @@ export default function SettingsScreen({ open, onClose, preload }) {
                 <div className="step" id="stp2"><span className="no">2</span><span className="cn">核对接口地址</span>
                   <div className="bd">
                     <div className="stf"><label htmlFor="stBase">接口地址（Base URL）</label>
-                      <input type="text" id="stBase" spellCheck="false" defaultValue={s.base} placeholder="https://api.deepseek.com" ref={baseRef} onChange={onField('base')} /></div>
+                      <input type="text" id="stBase" spellCheck="false" value={s.base} placeholder="https://api.deepseek.com" ref={baseRef} onChange={onField('base')} /></div>
                     {/* L522-524：两句提示二选一（`pv === 'custom' || pv.charAt(0) === 'u'` ⇒ 自定义那句）。 */}
                     <div className="hint" id="stBaseHint">{(pv === 'custom' || pv.charAt(0) === 'u')
                       ? <>{'自定义的这家：把服务商给你的'}<b>接口地址</b>{'填在这里（一般以 /v1 结尾），再往下填 Key。'}</>
-                      : (pv === 'zhipu' && isAnth(s.base)
-                        ? <>{'已切到 token plan 的地址（'}<code>api/anthropic</code>
-                          {'）；普通 API Key 请点击'}<a href="#" role="button" id="stZipToggle" onClick={onZipToggle}
-                            style={{ textDecoration: 'underline', cursor: 'pointer', color: 'inherit' }}>这里</a>{'切回标准地址。'}</>
+                      : (pv === 'zhipu'
+                        ? <>{isAnth(s.base) ? '当前是 token plan 地址。' : '当前是普通 API 地址。'}{' '}
+                          <a href="#" role="button" id="stZipToggle" onClick={onZipToggle}
+                            style={{ textDecoration: 'underline', cursor: 'pointer', color: 'inherit' }}>
+                            {isAnth(s.base) ? '切换到普通 API' : '切换到 token plan'}
+                          </a></>
                         : '预设已自动填好，一般不用改；要换成别家的地址，直接改这里。')}</div></div></div>
                 <div className={'step' + (s.base ? '' : ' off')} id="stp3"><span className="no">3</span><span className="cn">把 API Key 粘进来</span>
                   <div className="bd">
-                    <div className="stf"><label htmlFor="stKey">API Key<b>必填</b></label>
-                      <div className="strow"><input type={eyeOn ? 'text' : 'password'} id="stKey" spellCheck="false" autoComplete="off" defaultValue={PORTABLE ? '' : s.key} placeholder={PORTABLE ? '已随包配置（不可查看）' : 'sk-...'} ref={keyRef} onChange={onField('key')} />
+                    <div className="stf"><label htmlFor="stKey">API Key{isLocalBase(s.base) ? null : <b>必填</b>}</label>
+                      <div className="strow"><input type={eyeOn ? 'text' : 'password'} id="stKey" spellCheck="false" autoComplete="off" value={PORTABLE && !draft.current?.keyEdited ? '' : s.key} placeholder={PORTABLE ? '已随包配置（不可查看）' : 'sk-...'} ref={keyRef} onChange={onField('key')} />
                       {PORTABLE ? null : <button className="sbtn" type="button" id="stEye" onClick={onEye}>{eyeOn ? '隐藏' : '显示'}</button>}</div>
                       {/* L547-558：三支（本地模型 / 有拿 Key 的地址 / 兜底）。`p` 只看 PROVS（见上面 `cur`）。 */}
-                      <div className="hint" id="stKeyHint">{(cur && cur.url
+                      <div className="hint" id="stKeyHint">{PORTABLE
+                        ? '这份软件已经配好了，直接用就行。要换成你自己的 Key，就把新的粘进来（粘一次就顶掉包里的）。'
+                        : (isLocalBase(s.base) ? '本机服务通常不需要 API Key。' : cur && cur.url
                           ? <>{'去哪里拿：'}<a href={cur.url} target="_blank" rel="noopener">{cur.url.replace(/^https?:\/\//, '')}</a></>
                           : '填服务商给你的 API Key，一般以 sk- 开头。')}</div>
                     </div></div></div>
                 <div className={'step' + (s.base ? '' : ' off')} id="stp4"><span className="no">4</span><span className="cn">从清单里挑一个模型</span>
                   <div className="bd">
                     <div className="sbtnrow" style={{ marginTop: '0' }}>
-                      <button className="sbtn pri" type="button" id="stPull">拉取可用模型</button>
+                      <button className="sbtn" type="button" id="stPull">拉取可用模型</button>
                       <span className="hint" id="stPullHint" style={{ margin: '0', alignSelf: 'center' }}>连上你填的服务商，把能用的模型列出来。</span></div>
                     <div id="stModels" className="mmodels" style={{ display: 'none' }}></div>
                     <div className="stf" style={{ margin: '16px 0 0' }}><label htmlFor="stModel">选中的模型</label>
-                      <input type="text" id="stModel" spellCheck="false" defaultValue={s.model} placeholder="deepseek-chat" ref={modelRef} onChange={onField('model')} /></div>
+                      <input type="text" id="stModel" spellCheck="false" value={s.model} placeholder="deepseek-chat" ref={modelRef} onChange={onField('model')} /></div>
                   </div></div>
-                <div className={'step' + (ok ? '' : ' off')} id="stp5"><span className="no">5</span><span className="cn">点一下，看通不通</span>
+              </div>
+              <details id="stAdv"><summary>进阶设置 <span>温度与连接方式</span><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="m6 9 6 6 6-6" /></svg></summary>
+                <div style={{ padding: '16px 0 0' }}>
+                  <div className="stf"><label htmlFor="stTemp">温度（0.2 更稳、0.8 更活，解卦建议 0.5 左右）</label>
+                    <input type="number" id="stTemp" min="0" max="2" step="0.1" value={s.temp} ref={tempRef} onChange={onTemp} /></div>
+                  <div className="stf"><label>连接方式</label>
+                    <div className="sbtnrow" style={{ marginTop: '0' }}>
+                      <button className="sbtn" type="button" id="stWireD" aria-pressed={s.wire === 'direct'} onClick={onWire('direct')}>浏览器直连</button>
+                      <button className="sbtn" type="button" id="stWireP" aria-pressed={s.wire === 'proxy'} onClick={onWire('proxy')}>本地中转</button></div>
+                    <div className="hint">直连最简单，一般不用改这里。只有这家服务商不让网页调用它、怎么换都连不上时，才需要切到「本地中转」——那要另有一个中转程序在这台电脑上跑着。</div></div>
+                  <div className="stf" id="stProxyRow" style={{ display: s.wire === 'proxy' ? undefined : 'none' }}><label htmlFor="stProxy">中转地址</label>
+                    <input type="text" id="stProxy" spellCheck="false" value={s.proxy} placeholder="http://127.0.0.1:8080" ref={proxyRef} onChange={onProxy} /></div>
+                </div></details>
+                <div className="step" id="stp5"><span className="no">5</span><span className="cn">保存设置</span>
                   <div className="bd"><div className="sbtnrow" style={{ marginTop: '0' }}>
-                    <button className="sbtn pri" type="button" id="stTest">测试连接</button>
-                    <button className="sbtn" type="button" id="stSave" onClick={onSave}>保存</button>
-                    <button className="sbtn" type="button" id="stClearAll" onClick={onClearAll}>清空配置</button></div>
+                    <button className="sbtn smr-clear" type="button" id="stClearAll" onClick={onClearAll}>清空配置</button>
+                    <button className="sbtn" type="button" id="stTest">测试连接</button>
+                    <button className="sbtn pri" type="button" id="stSave" onClick={onSave}>保存</button></div>
                     <div id="stMsg" className="stmsg" style={{ display: 'none' }} ref={msgRef}></div>
                   </div></div>
               </div>
-              <details id="stAdv"><summary style={{ cursor: 'pointer', fontSize: '12.5px', color: 'var(--dim2)', letterSpacing: '.06em', padding: '6px 0' }}>进阶设置（温度 / 连接方式）</summary>
-                <div style={{ padding: '16px 0 0' }}>
-                  <div className="stf"><label htmlFor="stTemp">温度（0.2 更稳、0.8 更活，解卦建议 0.5 左右）</label>
-                    <input type="number" id="stTemp" min="0" max="2" step="0.1" defaultValue={s.temp} ref={tempRef} onChange={onTemp} /></div>
-                  <div className="stf"><label>连接方式</label>
-                    <div className="sbtnrow" style={{ marginTop: '0' }}>
-                      <button className={'sbtn' + (s.wire === 'direct' ? ' pri' : '')} type="button" id="stWireD" onClick={onWire('direct')}>浏览器直连</button>
-                      <button className={'sbtn' + (s.wire === 'proxy' ? ' pri' : '')} type="button" id="stWireP" onClick={onWire('proxy')}>本地中转</button></div>
-                    <div className="hint">直连最简单，一般不用改这里。只有这家服务商不让网页调用它、怎么换都连不上时，才需要切到「本地中转」——那要另有一个中转程序在这台电脑上跑着。</div></div>
-                  {/* L563：`el.stProxyRow.style.display = s.wire === 'proxy' ? '' : 'none'` ——
-                      `render()` 里**直接改 DOM**（源文件此处是静态 `display:none`）⇒ JSX 照做：
-                      静态保持 `none`，切换在"每次重画后"的 effect 里赋同一表达式。 */}
-                  <div className="stf" id="stProxyRow" style={{ display: 'none' }}><label htmlFor="stProxy">中转地址</label>
-                    <input type="text" id="stProxy" spellCheck="false" defaultValue={s.proxy} placeholder="http://127.0.0.1:8080" ref={proxyRef} onChange={onProxy} /></div>
-                </div></details>
             </section>
 
             <section className="setsec" id="s-skin">
@@ -1125,6 +1147,11 @@ export default function SettingsScreen({ open, onClose, preload }) {
             <section className="setsec about" id="s-about">
               <h3>关于</h3>
               <p><b>遂问</b>　{verTxt ? 'v' + verTxt : VER}</p>
+              {onHuiguan && <div className="datarow"><div className="m"><b>回观</b>
+                <p>查看本周或本月的卦例统计，仅在本机汇总。</p></div>
+                <button className="sbtn" type="button" id="stHuiguan" aria-haspopup="dialog"
+                  onClick={e => onHuiguan(e.currentTarget)}>打开回观</button>
+              </div>}
               {/* ★ （app 内更新·桌面档 B）：下好整包 → 换装 → 自己重启。
                   只在桌面 exe 里出现（网页版没有 __TAURI__，也不能替换自己的文件 ⇒ 不显示这一行）。 */}
               {IS_TAURI ? (

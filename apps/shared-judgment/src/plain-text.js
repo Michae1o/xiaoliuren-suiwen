@@ -1,7 +1,7 @@
 /* plain-text.js —— 断辞纯文本（原 blk4.js:287-321 的 plainAll）
    逐字搬运，**唯一改动**：末尾两个依赖 localStorage 的钩子（ruleBlock / reviewBlock）
    改成从参数 hooks 取，其余一字未动。 */
-import { G, GONG, stripB, gxTx, szTx, ganTx, zhi } from './judgment.js';
+import { G, GONG, CATS, stripB, gxTx, szTx, ganTx, zhi } from './judgment.js';
 
 export function plainAll(c, B, hooks) {
   var L = [];
@@ -15,7 +15,14 @@ export function plainAll(c, B, hooks) {
   L.push('读法：六宫不是分类表。类象是素材库，宫义由所问之事决定（问什么，是什么）；不够用时用八卦＋五行去推——「五行本身也有类象 只不过，我们在小六壬当中，优先考虑的是六神类象」。');
   GONG.forEach(function (g) {
     L.push('· ' + g + '　' + G[g].wx + ' · ' + G[g].jx + ' · 核心动作词「' + G[g].act + '」：' + G[g].xing);
-    L.push('　　类象：' + G[g].lei + '　（类象是素材库，远不止这些）');
+    var byCat = [];
+    Object.keys(CATS).forEach(function (k) {
+      if (k === 'general') return;
+      var v = CATS[k].luo && CATS[k].luo[g];
+      if (v) byCat.push(CATS[k].name + '：' + v);
+    });
+    if (byCat.length) L.push('　　【各问法下的读法】' + byCat.join('；'));
+    if (G[g].lei) L.push('　　类象：' + G[g].lei);
     L.push('　　' + stripB(gxTx(g)) + '｜方位 ' + G[g].fw + '｜' + stripB(szTx(g)) + '｜' + stripB(ganTx(g)) + '｜季 ' + G[g].ji +
            '｜固定三数 ' + G[g].san + '｜排位轮回 ' + G[g].ying);
   });
@@ -29,7 +36,7 @@ export function plainAll(c, B, hooks) {
   });
   if (hooks && typeof hooks.ruleBlock === 'function') {
     var kb = hooks.ruleBlock();
-    if (kb) L.push(kb);              /* 已确认准则：权重高于一般判据 */
+    if (kb) L.push(kb);              /* ★ 已确认的准则，排在一般判据前面 */
   }
   if (hooks && typeof hooks.reviewBlock === 'function') {
     var rb = hooks.reviewBlock();

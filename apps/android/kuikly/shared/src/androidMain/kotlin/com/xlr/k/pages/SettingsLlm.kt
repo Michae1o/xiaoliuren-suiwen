@@ -1,5 +1,7 @@
 package com.xlr.k.pages
 
+import android.animation.ValueAnimator
+import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -7,6 +9,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import com.tencent.kuikly.compose.animation.AnimatedVisibility
+import com.tencent.kuikly.compose.animation.expandVertically
+import com.tencent.kuikly.compose.animation.shrinkVertically
+import com.tencent.kuikly.compose.animation.core.animateFloatAsState
+import com.tencent.kuikly.compose.animation.core.tween
+import com.tencent.kuikly.compose.foundation.Canvas
 import com.tencent.kuikly.compose.foundation.background
 import com.tencent.kuikly.compose.foundation.border
 import com.tencent.kuikly.compose.foundation.layout.Box
@@ -16,16 +24,182 @@ import com.tencent.kuikly.compose.foundation.layout.Spacer
 import com.tencent.kuikly.compose.foundation.layout.fillMaxSize
 import com.tencent.kuikly.compose.foundation.layout.fillMaxWidth
 import com.tencent.kuikly.compose.foundation.layout.height
+import com.tencent.kuikly.compose.foundation.layout.heightIn
 import com.tencent.kuikly.compose.foundation.layout.padding
+import com.tencent.kuikly.compose.foundation.layout.size
 import com.tencent.kuikly.compose.foundation.layout.width
 import com.tencent.kuikly.compose.foundation.lazy.LazyColumn
+import com.tencent.kuikly.compose.foundation.lazy.LazyListScope
+import com.tencent.kuikly.compose.foundation.shape.CircleShape
 import com.tencent.kuikly.compose.foundation.shape.RoundedCornerShape
+import com.tencent.kuikly.compose.material3.Text
 import com.tencent.kuikly.compose.ui.Alignment
 import com.tencent.kuikly.compose.ui.Modifier
 import com.tencent.kuikly.compose.ui.draw.clip
+import com.tencent.kuikly.compose.ui.draw.clipToBounds
+import com.tencent.kuikly.compose.ui.geometry.Offset
+import com.tencent.kuikly.compose.ui.graphics.Brush
 import com.tencent.kuikly.compose.ui.graphics.Color
+import com.tencent.kuikly.compose.ui.graphics.StrokeCap
+import com.tencent.kuikly.compose.ui.graphics.graphicsLayer
+import com.tencent.kuikly.compose.ui.semantics.Role
+import com.tencent.kuikly.compose.ui.semantics.clearAndSetSemantics
+import com.tencent.kuikly.compose.ui.semantics.contentDescription
+import com.tencent.kuikly.compose.ui.semantics.onClick
+import com.tencent.kuikly.compose.ui.semantics.role
+import com.tencent.kuikly.compose.ui.semantics.semantics
+import com.tencent.kuikly.compose.ui.semantics.stateDescription
+import com.tencent.kuikly.compose.ui.text.font.FontWeight
+import com.tencent.kuikly.compose.ui.text.style.TextAlign
+import com.tencent.kuikly.compose.ui.text.style.TextOverflow
 import com.tencent.kuikly.compose.ui.unit.dp
+import com.tencent.kuikly.compose.ui.unit.sp
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+/** A saved-model summary is also the disclosure; the adjacent guide remains a separate control. */
+@Composable
+private fun ModelSettingsSummary(
+    configured: Boolean,
+    model: String,
+    provider: String,
+    open: Boolean,
+    reducedMotion: Boolean,
+    onToggle: () -> Unit,
+) {
+    val pressScope = rememberCoroutineScope()
+    var held by remember { mutableStateOf(false) }
+    var confirmedPulse by remember { mutableStateOf(false) }
+    var pulseReset by remember { mutableStateOf<Job?>(null) }
+    // Preserve a visible beat after a quick successful tap. A canceled drag never starts a pulse.
+    val down = held || confirmedPulse
+    val pressure by animateFloatAsState(
+        if (down) 1f else 0f,
+        tween(if (reducedMotion) 0 else if (down) 48 else 170, easing = KY_EASE_OUT),
+    )
+    val activate = {
+        pulseReset?.cancel()
+        confirmedPulse = true
+        pulseReset = pressScope.launch {
+            delay(96)
+            confirmedPulse = false
+        }
+        onToggle()
+    }
+    val rotation by animateFloatAsState(
+        if (open) 90f else 0f,
+        tween(
+            if (reducedMotion) 0 else if (open) ModelRevealInMs else ModelRevealOutMs,
+            easing = if (open) KY_EASE_OUT else KY_EASE_IN,
+        ),
+    )
+    val state = if (configured) "已配置" else "配置未完成"
+    val modelLabel = if (configured) model else "尚未选择模型"
+    val providerLabel = if (configured) provider else "填写服务商与模型"
+    val ink = KY_DIM
+    // Transform only the glass and its contents, not the full-size input/accessibility bounds.
+    Box(
+        modifier = Modifier.fillMaxWidth()
+            .semantics(mergeDescendants = true) {
+                role = Role.Button
+                contentDescription = "模型配置，$state，$modelLabel，$providerLabel"
+                stateDescription = if (open) "已展开" else "已收起"
+                onClick(label = if (open) "收起" else "展开") { activate(); true }
+            }
+            .tapPressable(onPress = { held = it }, onTap = activate),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp)
+                .graphicsLayer {
+                    if (!reducedMotion) {
+                        scaleX = 1f - .023f * pressure
+                        scaleY = 1f - .055f * pressure
+                    }
+                }
+                .modelSummaryGlass(pressure, open)
+                .padding(start = 14.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(.43f).clearAndSetSemantics { }) {
+                Text_("模型配置", fontSize = 14f, lineHeight = 20f, weight = 600, maxLines = 1)
+                Spacer(Modifier.height(3.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(5.dp).clip(CircleShape).background(if (configured) KY_ACCENT else KY_DIM2))
+                    Spacer(Modifier.width(6.dp))
+                    Text_(state, color = KY_DIM, fontSize = 11.5f, lineHeight = 16f, maxLines = 1)
+                }
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(
+                Modifier.weight(.57f).clearAndSetSemantics { },
+                horizontalAlignment = Alignment.End,
+            ) {
+                Text(modelLabel, color = KY_INK, fontSize = 13.5.sp, lineHeight = 19.sp,
+                    fontWeight = FontWeight(600), textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(3.dp))
+                Text(providerLabel, color = KY_DIM, fontSize = 11.5.sp, lineHeight = 16.sp,
+                    textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Spacer(Modifier.width(9.dp))
+            Canvas(Modifier.size(16.dp).graphicsLayer { rotationZ = rotation }) {
+                val tip = Offset(size.width * .64f, size.height * .5f)
+                drawLine(ink, Offset(size.width * .40f, size.height * .27f), tip, strokeWidth = 1.45.dp.toPx(), cap = StrokeCap.Round)
+                drawLine(ink, tip, Offset(size.width * .40f, size.height * .73f), strokeWidth = 1.45.dp.toPx(), cap = StrokeCap.Round)
+            }
+        }
+    }
+}
+
+/** The existing skin glass vocabulary, without a gray face or any external cast shadow. */
+private fun Modifier.modelSummaryGlass(pressure: Float, open: Boolean): Modifier {
+    val specular = (if (open) .025f else 0f) + pressure * .10f
+    val dark = Skin.dark
+    val face = Skin.def.surface
+    val rim = if (dark) Skin.def.ink else Color.White
+    val shape = RoundedCornerShape(12.dp)
+    // Use the Kuikly brush path: unlike a flat translucent background, it renders alpha reliably.
+    return clip(shape)
+        .background(Brush.verticalGradient(
+            0f to rim.copy(alpha = ((if (dark) .40f else .86f) + specular).coerceAtMost(1f)),
+            .026f to rim.copy(alpha = (if (dark) .17f else .46f) + specular),
+            .12f to face.copy(alpha = (if (dark) .25f else .31f) + specular),
+            .78f to face.copy(alpha = (if (dark) .12f else .15f) + specular),
+            .965f to face.copy(alpha = if (dark) .095f else .115f),
+            1f to rim.copy(alpha = if (dark) .10f else .37f),
+        ))
+        .background(Brush.horizontalGradient(
+            0f to rim.copy(alpha = if (dark) .15f else .45f),
+            .045f to rim.copy(alpha = if (dark) .027f else .09f),
+            .18f to Color.Transparent,
+            .965f to Color.Transparent,
+            1f to rim.copy(alpha = if (dark) .085f else .22f),
+        ))
+        .border(.7.dp + .45.dp * pressure, rim.copy(alpha = (if (dark) .18f else .49f) + .28f * pressure), shape)
+}
+
+private const val ModelRevealInMs = 245
+private const val ModelRevealOutMs = 190
+
+/** Stable slots let AnimatedVisibility retain the form through exit and reverse from its current height. */
+private fun LazyListScope.modelEditItem(open: Boolean, reducedMotion: Boolean, content: @Composable () -> Unit) {
+    item {
+        if (reducedMotion) {
+            if (open) Column(content = { content() })
+        } else {
+            Box(Modifier.fillMaxWidth().clipToBounds()) {
+                AnimatedVisibility(
+                    visible = open,
+                    enter = expandVertically(animationSpec = tween(ModelRevealInMs, easing = KY_EASE_OUT), expandFrom = Alignment.Top),
+                    exit = shrinkVertically(animationSpec = tween(ModelRevealOutMs, easing = KY_EASE_IN), shrinkTowards = Alignment.Top),
+                ) {
+                    Column { content() }
+                }
+            }
+        }
+    }
+}
 
 /* 设置 · 大模型（旧 SettingsScreen.jsx 的 #s-llm，五步向导）
      grid auto-fill minmax(148px,1fr) / gap 10px；名字 13.5px 600、注 11px dim2）；
@@ -183,55 +357,56 @@ internal fun LlmPage() {
         }
     }
 
-    val configured = LlmStore.missing(cfgSnap).isEmpty() && cfgSnap.key.isNotEmpty()
+    val configured = LlmStore.missing(cfgSnap).isEmpty()
+
+    var editOpen by remember { mutableStateOf(false) }
+    val reducedMotion = Build.VERSION.SDK_INT >= 26 && !ValueAnimator.areAnimatorsEnabled()
+    var canShowCollapsedStatus by remember { mutableStateOf(true) }
+    LaunchedEffect(editOpen, reducedMotion) {
+        if (!editOpen) {
+            if (!reducedMotion && !canShowCollapsedStatus) delay(ModelRevealOutMs.toLong())
+            canShowCollapsedStatus = true
+        }
+    }
+    val providerName = tiles.firstOrNull {
+        it.base.isNotBlank() && it.base.trimEnd('/') == cfgSnap.base.trimEnd('/')
+    }?.n ?: "自定义接口"
 
     LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
         item {
-            SetLead("解卦本身不联网：起卦、排盘、断卦依据都在本机算。配上模型，点「让模型解卦」直接出断辞。")
-
-            /* 顶部这张卡
-               ⇒ 整张卡就是「重新看配置引导」的入口，副标题保留一眼可见的状态（已配置/未配置）。
-               动作与底部那条早期版本入口一致：guideStep=0 + guideOn=true。 */
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (configured) veil(0.88f) else veil(0.5f))
-                    .border(Skin.borderW, if (configured) KY_ACCENT_LINE else veil(0.75f), RoundedCornerShape(12.dp))
-                    .tapNoIndication {
-                        Session.guideStep = 0
-                        Session.guideOn = true
-                    }
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text_(
-                        text = "重新看配置引导",
-                        fontSize = 13.5f,
-                        lineHeight = 21f,
-                        weight = 500,
-                    )
-                    Text_(
-                        text = if (configured) "已配置 · " + cfgSnap.model + "　·　再来一遍图文"
-                        else "八步图文，跟着走就行；不知道 Key 去哪拿，也在这",
-                        fontSize = 11f,
-                        lineHeight = 17f,
-                        color = KY_DIM2,
-                    )
+            Column(Modifier.fillMaxWidth()) {
+                Text_("起卦、排盘和断卦依据均在本机计算。配置后可使用「让模型解卦」。",
+                    fontSize = 11.5f, lineHeight = 18f, color = KY_DIM)
+                Spacer(Modifier.height(12.dp))
+                ModelSettingsSummary(configured, cfgSnap.model, providerName, editOpen, reducedMotion) {
+                    if (editOpen) Platform.hideIme?.invoke() else canShowCollapsedStatus = false
+                    editOpen = !editOpen
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text_(text = "›", fontSize = 18f, lineHeight = 20f, color = KY_DIM2)
+                Spacer(Modifier.height(8.dp))
+                SetBtn(if (configured) "重新看引导" else "查看配置引导", small = true) {
+                    Session.guideStep = 0
+                    Session.guideOn = true
+                }
+                // Do not insert a result above the form midway through its upward collapse.
+                if (!editOpen && (reducedMotion || canShowCollapsedStatus)) {
+                    val status = when {
+                        testing -> "正在测试草稿配置…"
+                        pulling -> d.pullHint
+                        else -> msg
+                    }
+                    if (status.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text_(status, fontSize = 11.5f, lineHeight = 18f, color = KY_DIM2)
+                    }
+                }
             }
-            Spacer(modifier = Modifier.height(18.dp))
-
-            /* ① 选服务商 —— 一格一家（旧 .provs 网格） */
-            SetSecTitle("1　选一个服务商")
+            Spacer(Modifier.height(16.dp))
         }
+        modelEditItem(editOpen, reducedMotion) { SetSecTitle("1　选择服务商", top = 0) }
 
         /* 两列网格：预设 + 自定义，末尾跟一个「＋ 自定义」 */
         cells.chunked(2).forEach { pair ->
-            item {
+            modelEditItem(editOpen, reducedMotion) {
                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
                     pair.forEachIndexed { i, t ->
                         if (i > 0) Spacer(modifier = Modifier.width(10.dp))
@@ -286,7 +461,7 @@ internal fun LlmPage() {
         }
 
         if (adding) {
-            item {
+            modelEditItem(editOpen, reducedMotion) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -313,19 +488,18 @@ internal fun LlmPage() {
         }
 
 
-        item {
-            SetHint("选完会自动填好接口地址和模型名，你只要补一个 Key。")
+        modelEditItem(editOpen, reducedMotion) {
+            SetHint("预设会填写接口地址和模型名；再补服务商的 API Key。")
             Spacer(modifier = Modifier.height(20.dp))
 
             /* ② 接口地址 */
-            SetSecTitle("2　核对接口地址")
+            SetSecTitle("2　接口与凭据")
             SetLabel("接口地址（Base URL）")
             SetField(d.base, { d.base = it; msg = "" })
-            SetHint("预设已自动填好，一般不用改；要换成别家的地址，直接改这里。")
-            Spacer(modifier = Modifier.height(20.dp))
+            SetHint("自定义服务商可在这里填写地址。")
+            Spacer(modifier = Modifier.height(10.dp))
 
-            /* ③ API Key */
-            SetSecTitle("3　把 API Key 粘进来")
+            /* API Key */
             SetLabel("API Key　必填")
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(modifier = Modifier.weight(1f)) {
@@ -381,7 +555,7 @@ internal fun LlmPage() {
             Spacer(modifier = Modifier.height(20.dp))
 
             /* ④ 挑模型：拉取 + 清单 + 手填 */
-            SetSecTitle("4　挑一个模型")
+            SetSecTitle("3　选择模型")
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SetBtn(if (pulling) "拉取中…" else "拉取可用模型", primary = true) { if (!pulling) doPull() }
                 Spacer(modifier = Modifier.width(10.dp))
@@ -448,28 +622,12 @@ internal fun LlmPage() {
             Spacer(modifier = Modifier.height(20.dp))
 
             /* ⑤ 测试 / 保存 */
-            SetSecTitle("5　点一下，看通不通")
+            SetSecTitle("4　测试与保存")
             Row(verticalAlignment = Alignment.CenterVertically) {
-                SetBtn(if (testing) "测试中…" else "测试连接", primary = true) { if (!testing) doTest() }
+                SetBtn(if (testing) "测试中…" else "测试连接", enabled = !testing) { if (!testing) doTest() }
                 Spacer(modifier = Modifier.width(8.dp))
                 SetBtn("保存", primary = true) { doSave() }
-                Spacer(modifier = Modifier.width(8.dp))
-                SetBtn("清空配置", danger = true) {
-                    LlmStore.clear()
-                    d.base = PROVS[0].base
-                    d.model = PROVS[0].model
-                    d.customK = ""
-                    d.key = ""
-                    d.wire = "direct"
-                    d.proxy = "http://127.0.0.1:8080"
-                    d.temp = "0.5"
-                    d.models = emptyList()
-                    d.pullHint = ""
-                    d.modelsNote = ""
-                    msg = "已清空配置"
-                    good = true
-                    cfgSnap = LlmStore.load()
-                }
+
             }
             if (msg.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(10.dp))
@@ -516,7 +674,25 @@ internal fun LlmPage() {
                     SetField(d.proxy, { d.proxy = it; msg = "" })
                 }
             }
-            /* 早期版本这里还有一条「重新看配置引导」，已并入顶部那张卡（同一个动作，别摆两处） */
+            Spacer(Modifier.height(20.dp))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(KY_LINE))
+            Spacer(Modifier.height(12.dp))
+            SetBtn("清空配置", danger = true) {
+                LlmStore.clear()
+                d.base = PROVS[0].base
+                d.model = PROVS[0].model
+                d.customK = ""
+                d.key = ""
+                d.wire = "direct"
+                d.proxy = "http://127.0.0.1:8080"
+                d.temp = "0.5"
+                d.models = emptyList()
+                d.pullHint = ""
+                d.modelsNote = ""
+                msg = "已清空配置"
+                good = true
+                cfgSnap = LlmStore.load()
+            }
             Spacer(modifier = Modifier.height(34.dp))
         }
     }

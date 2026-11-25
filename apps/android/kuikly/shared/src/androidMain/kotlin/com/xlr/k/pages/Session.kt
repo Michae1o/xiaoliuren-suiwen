@@ -147,6 +147,15 @@ internal object Session {
     }
 
     fun clear() {
+        // “新开一卦”在用户再次起卦之前就作废上一卦后台请求。
+        castSeq += 1
+        recId = ""
+        askBusy = false
+        askAnswer = ""
+        askErr = ""
+        askStat = ""
+        askModelLabel = ""
+        followReady = false
         q = ""
         bg = ""
         cast = null

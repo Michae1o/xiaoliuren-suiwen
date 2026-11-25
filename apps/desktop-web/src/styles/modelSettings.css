@@ -1,0 +1,231 @@
+#setScreen #s-llm #stCard.smr-summary {
+  margin: 21px 0 5px;
+  /* The copper skin also paints the wrapper; this one card has no cast shadow. */
+  box-shadow: none !important;
+}
+#setScreen #s-llm .smr-config {
+  --smr-face: color-mix(in srgb, var(--surface) 44%, transparent);
+  --smr-glint: rgb(255 255 255 / 0.37);
+  --smr-rim-hi: rgb(255 255 255 / 0.82);
+  --smr-rim-low: color-mix(in srgb, var(--ink) 15%, transparent);
+  --smr-tint: color-mix(in srgb, var(--accent) 5%, transparent);
+  position: relative;
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(128px, 1fr) minmax(0, 1.15fr) 18px;
+  align-items: center;
+  gap: 14px;
+  border: 0;
+  border-radius: var(--m-r-md, 12px);
+  padding: 15px 15px 15px 16px;
+  min-height: 74px;
+  text-align: left;
+  color: var(--ink);
+  background-color: var(--smr-face);
+  background-image:
+    radial-gradient(ellipse at 8% -62%, var(--smr-glint), transparent 68%),
+    linear-gradient(127deg, transparent 18%, var(--smr-tint) 100%);
+  -webkit-backdrop-filter: blur(13px) saturate(1.16);
+  backdrop-filter: blur(13px) saturate(1.16);
+  box-shadow: none;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background-color 0.18s var(--m-ease, ease),
+    transform 0.18s var(--m-ease, ease);
+}
+html[data-theme="dark"] #setScreen #s-llm .smr-config {
+  --smr-glint: rgb(255 255 255 / 0.14);
+  --smr-rim-hi: rgb(255 255 255 / 0.32);
+  --smr-rim-low: color-mix(in srgb, var(--ink) 18%, transparent);
+}
+/* Only the one-pixel rim catches light; the face below it stays translucent. */
+#setScreen #s-llm .smr-config::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--smr-rim-low);
+  border-top-color: var(--smr-rim-hi);
+  border-radius: inherit;
+  pointer-events: none;
+}
+@supports (mask-composite: exclude) {
+  #setScreen #s-llm .smr-config::before {
+    border: 0;
+    padding: 1px;
+    background: linear-gradient(
+      119deg, var(--smr-rim-hi), var(--smr-rim-low) 39%,
+      var(--smr-rim-low) 77%, var(--smr-rim-hi)
+    );
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+  }
+}
+#setScreen #s-llm .smr-config:hover {
+  background-color: color-mix(in srgb, var(--surface) 58%, transparent);
+}
+#setScreen #s-llm .smr-config:active {
+  background-color: color-mix(in srgb, var(--surface) 68%, transparent);
+  transform: scale(0.994);
+}
+@media (forced-colors: active) {
+  #setScreen #s-llm .smr-config::before {
+    border: 1px solid ButtonText;
+    background: none;
+    mask: none;
+  }
+}
+#setScreen #s-llm .smr-config:focus-visible,
+#setScreen #s-llm :is(summary, .sbtn, .prov):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+#setScreen #s-llm .smr-config svg {
+  color: var(--dim);
+  transition: transform 0.18s var(--m-ease, ease);
+}
+#setScreen #s-llm .smr-config:hover svg {
+  transform: translate(2px);
+}
+#setScreen #s-llm .smr-config[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+#setScreen #s-llm :is(.smr-what, .smr-value) {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+#setScreen #s-llm .smr-config strong {
+  font-size: 14px;
+  font-weight: 630;
+  overflow-wrap: anywhere;
+}
+#setScreen #s-llm .smr-value {
+  text-align: right;
+}
+#setScreen #s-llm :is(.smr-status, .smr-value span) {
+  font-size: 12px;
+  color: var(--dim);
+  overflow-wrap: anywhere;
+}
+#setScreen #s-llm .smr-status i {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin: 0 7px 2px 0;
+  border-radius: 50%;
+  background: var(--dim2);
+}
+#setScreen #s-llm .smr-status i[data-state="pass"] {
+  background: var(--ok);
+}
+#setScreen #s-llm .smr-status i[data-state="fail"] {
+  background: var(--bad);
+}
+#setScreen #s-llm .smr-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 14px;
+}
+#setScreen #s-llm :is(.smr-links .sbtn, #stModelEditor .sbtn:not(#stSave)) {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  min-height: 34px;
+}
+#setScreen
+  #s-llm
+  :is(.smr-links .sbtn, #stModelEditor .sbtn:not(#stSave)):hover:not(
+    :disabled
+  ) {
+  background: var(--accent-bg);
+}
+#setScreen #s-llm #stModelEditor[hidden] {
+  display: none !important;
+}
+#setScreen #s-llm #stModelEditor {
+  animation: smr-enter 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes smr-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+#setScreen #s-llm #stWiz {
+  margin: 8px 0 0;
+  outline: none;
+}
+#setScreen #s-llm #stp5 {
+  margin-top: 12px;
+}
+#setScreen #s-llm #stp5 .sbtnrow {
+  align-items: center;
+}
+#setScreen #s-llm #stClearAll {
+  margin-inline-end: auto;
+}
+#setScreen #s-llm #stClearAll:hover {
+  color: var(--bad);
+}
+#setScreen #s-llm #stAdv {
+  border: 0;
+  margin-top: 8px;
+}
+#setScreen #s-llm #stAdv :is(#stWireD, #stWireP)[aria-pressed="true"] {
+  color: var(--accent);
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+#setScreen #s-llm #stAdv summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  padding: 0 11px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--ink);
+  border-radius: var(--m-r-md, 12px);
+  font-size: 13px;
+}
+#setScreen #s-llm #stAdv summary:hover {
+  background: var(--accent-bg);
+}
+#setScreen #s-llm #stAdv summary::-webkit-details-marker {
+  display: none;
+}
+#setScreen #s-llm #stAdv summary span {
+  color: var(--dim2);
+  font-size: 12px;
+  margin-inline-start: auto;
+}
+#setScreen #s-llm #stAdv summary svg {
+  color: var(--dim2);
+  transition: transform 0.18s var(--m-ease, ease);
+}
+#setScreen #s-llm #stAdv[open] summary svg {
+  transform: rotate(180deg);
+}
+@media (max-width: 660px) {
+  #setScreen #s-llm .smr-config {
+    grid-template-columns: minmax(90px, 1fr) minmax(80px, 1fr) 15px;
+    gap: 7px;
+    padding-inline: 11px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #setScreen #s-llm #stModelEditor {
+    animation: none;
+  }
+  #setScreen #s-llm :is(.smr-config, .smr-config svg, #stAdv summary svg) {
+    transition: none;
+  }
+}

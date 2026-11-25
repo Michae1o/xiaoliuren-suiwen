@@ -192,7 +192,7 @@ src/corpus.js            打包成代码读的形式
 **洛神（IndieEcho）** —— 独立开发者。
 
 - B 站：<https://space.bilibili.com/495284861>
-- 项目主页：<https://fairy-deepdive.cn/guatai/>
+- 项目主页：<(你的站点)
 - 问题与建议：在本仓开 Issue，或到 B 站私信
 
 这个仓是项目的公开源码，桌面端、安卓端、iOS 端都在里面。

@@ -1,0 +1,45 @@
+.hg-winter-photo-backdrop {position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:-1}
+.hg-winter-photo-photo {position:absolute;overflow:hidden;height:auto;max-width:none;pointer-events:none;user-select:none}
+.hg-winter-photo-snow-field {position:absolute;inset:0}
+.hg-winter-photo-flake {
+ position:absolute;display:block;background:radial-gradient(ellipse,var(--hg-winter-photo-flake-tone) 0%,color-mix(in srgb,var(--hg-winter-photo-flake-tone) 81%,transparent) 27%,transparent 72%);
+ transform-origin:center;filter:blur(.3px);pointer-events:none;
+}
+.hg-winter-photo-dawn-shadow,.hg-winter-photo-dawn-air,.hg-winter-photo-dawn-line {position:absolute;pointer-events:none}
+.hg-winter-photo-dawn-shadow {
+ right:-9%;bottom:-14%;width:69%;height:33%;
+ background:radial-gradient(ellipse at 72% 73%,#61637c46 0%,#65708733 26%,transparent 72%);
+}
+.hg-winter-photo-dawn-air {
+ right:-6%;bottom:3%;width:60%;height:27%;transform-origin:77% 82%;
+ background:radial-gradient(ellipse 78% 31% at 71% 72%,#ffdd974f 0%,#efb47f3b 23%,#e3ad7224 47%,transparent 84%);
+}
+.hg-winter-photo-dawn-line {
+ right:-1%;bottom:7.7%;width:54%;height:10%;transform-origin:67% 66%;
+ background:radial-gradient(ellipse 65% 12% at 67% 63%,#ffe5a7 0%,#ffd0919e 28%,#f3b88466 54%,#f1b27828 75%,transparent 100%);
+}
+.hg-winter-photo-icicles-main {
+ width:clamp(105px,15.5%,213px);right:-2.1%;top:-2.9%;
+ mask-image:
+  radial-gradient(ellipse 81% 89% at 80% 0%,#000 20%,#000d 48%,#0006 72%,transparent 100%),
+  linear-gradient(180deg,#000 var(--hg-winter-photo-ice-set),transparent calc(var(--hg-winter-photo-ice-set) + 21%));
+ mask-composite:intersect;
+}
+.hg-winter-photo-deep-ice-main {
+ width:clamp(380px,68%,1358px);right:-4%;bottom:-4%;
+ mask-image:
+  radial-gradient(ellipse 74% 86% at 76% 99%,#000 24%,#000d 56%,#0006 77%,transparent 100%),
+  linear-gradient(0deg,#000 var(--hg-winter-photo-ice-set),transparent calc(var(--hg-winter-photo-ice-set) + 29%));
+ mask-composite:intersect;
+}
+.hg-winter-photo-deep-air {
+ position:absolute;right:-7%;bottom:-6%;width:71%;height:29%;pointer-events:none;
+ background:radial-gradient(ellipse 78% 69% at 78% 86%,#83a6c434 4%,#91aecd22 35%,transparent 88%);
+}
+@media(max-width:690px),(max-aspect-ratio:1/1) {
+ .hg-winter-photo-dawn-air{right:-12%;width:80%;height:24%;bottom:6%}
+ .hg-winter-photo-dawn-line{right:-9%;width:75%;height:8%;bottom:10.2%}
+ .hg-winter-photo-icicles-main{width:clamp(96px,28%,162px);right:-3.9%;top:-1.9%}
+ .hg-winter-photo-deep-ice-main{width:clamp(276px,84%,546px);right:-7%;bottom:-1.5%}
+ .hg-winter-photo-deep-air{width:86%;height:24%;right:-6%;bottom:-3%}
+}

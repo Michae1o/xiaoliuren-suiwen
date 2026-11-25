@@ -2,15 +2,13 @@
  *
  * 移植自安卓 SettingsText.kt：
  *   · FogLevelControl()：三档（静态雾景 / 轻柔流动 / 实时流雾），横拖跟手、松手就近吸附，
- *     360ms cubic-bezier(.22,1,.36,1) 收尾；按下时滑块轻微压扁+放大、拖动带一点旋转。
+ *     头尾用各自的阻尼弹簧，连点可接续当前形状。
  *   · GlassSwitch()：44×26 轨道、20 旋钮、可走 18；拖多少给多少，松手过半数即开；
  *     轨道主色浓度 0.58×p。
  *
- * ⚠ 本机 Windows「显示动画」关着 ⇒ 全局 prefers-reduced-motion: reduce ⇒ legacy.css 把
- *   transition/animation 全部打死。所以这里的动效一律走 WAAPI / 直接写 transform，
- *   与开屏、雾层同一口径（不要改成 CSS transition——那会变成瞬移）。
+ * 分段动效用 RAF，并显式遵守减少动态效果设置。冻结开关保持原 WAAPI。
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { FogCore } from '../data/fogCore.js';
 
 const EASE = 'cubic-bezier(.22,1,.36,1)';   /* 安卓 KY_EASE_OUT */
@@ -21,114 +19,172 @@ function cancelAnim(el) {
   el._fa = null;
 }
 
-/* 三档分段控件 */
+/* 三档分段控件。头尾各自阻尼，切档时保留当前两端的位置与速度。 */
+const clampFog = (value, min, max) => Math.max(min, Math.min(max, value));
+
 export function FogLevelControl({ level, onLevel }) {
   const trackRef = useRef(null);
   const thumbRef = useRef(null);
-  const state = useRef({ pos: level, dragging: false, cell: 1, width: 1, pull: 0 });
-  const [, force] = useState(0);
+  const motion = useRef({
+    left: level, right: level + 1, leftV: 0, rightV: 0,
+    target: level, direction: 1, press: 0, pressTarget: 0,
+    width: 0, frame: 0, last: 0, reduced: false, gesture: null, ignoreClickUntil: 0,
+  });
+  const s = motion.current;
 
   const paint = () => {
-    const th = thumbRef.current, tr = trackRef.current;
-    if (!th || !tr) return;
-    const s = state.current;
-    const w = tr.clientWidth || 1;
-    const cell = w / 3;
-    s.width = w; s.cell = cell;
-    th.style.width = (cell - 6) + 'px';
-    th.style.transform = 'translate3d(' + (cell * s.pos + 3) + 'px,0,0) scale(' +
-      (1 + 0.055 * (s.dragging ? 1 : 0) + 0.065 * Math.abs(s.pull)) + ',' +
-      (1 - 0.07 * (s.dragging ? 1 : 0) - 0.025 * Math.abs(s.pull)) + ') rotate(' +
-      (s.pull * 1.2) + 'deg)';
+    const thumb = thumbRef.current;
+    if (!thumb || !s.width) return;
+    const cell = s.width / 3;
+    const span = clampFog(s.right - s.left, 0.76, 1.42);
+    const center = clampFog((s.left + s.right) * 0.5, span * 0.5, 3 - span * 0.5);
+    const height = 1 - s.press - Math.min(0.09, Math.abs(span - 1) * 0.22);
+    thumb.style.width = Math.max(1, span * cell - 6) + 'px';
+    thumb.style.transform = 'translate3d(' + ((center - span * 0.5) * cell + 3) +
+      'px,0,0) scaleY(' + height + ')';
   };
 
-  useEffect(() => {
-    const s = state.current;
-    if (s.dragging) return;
-    const th = thumbRef.current;
+  const settle = () => {
+    if (s.frame) cancelAnimationFrame(s.frame);
+    s.frame = 0;
+    s.last = 0;
+    s.left = s.target;
+    s.right = s.target + 1;
+    s.leftV = s.rightV = 0;
+    s.press = 0;
     paint();
-    if (!th) return;
-    const from = s.pos;
-    if (Math.abs(from - level) < 0.001) return;
-    const cell = s.cell || 1;
-    const a = th.animate(
-      [{ transform: 'translate3d(' + (cell * from + 3) + 'px,0,0)' },
-       { transform: 'translate3d(' + (cell * level + 3) + 'px,0,0)' }],
-      { duration: 360, easing: EASE, fill: 'forwards' });
-    th._fa = a;
-    s.pos = level;
-    a.onfinish = () => { cancelAnim(th); paint(); };
+  };
+
+  const frame = (now) => {
+    s.frame = 0;
+    if (s.reduced) { settle(); return; }
+    const dt = s.last ? clampFog((now - s.last) / 1000, 0, 0.04) : 1 / 60;
+    s.last = now;
+    // Substeps keep rebounds stable if the WebView drops one or two frames.
+    const steps = Math.max(1, Math.ceil(dt * 120)), h = dt / steps;
+    const dragging = s.gesture?.dragging;
+    const frontK = dragging ? 815 : 485, frontD = dragging ? 45 : 28;
+    const backK = dragging ? 530 : 278, backD = dragging ? 36 : 21;
+    const kL = s.direction < 0 ? frontK : backK, dL = s.direction < 0 ? frontD : backD;
+    const kR = s.direction > 0 ? frontK : backK, dR = s.direction > 0 ? frontD : backD;
+    for (let i = 0; i < steps; i++) {
+      s.leftV += (kL * (s.target - s.left) - dL * s.leftV) * h;
+      s.rightV += (kR * (s.target + 1 - s.right) - dR * s.rightV) * h;
+      s.left += s.leftV * h;
+      s.right += s.rightV * h;
+    }
+    s.press += (s.pressTarget - s.press) * (1 - Math.exp(-dt * 27));
+    if (Math.abs(s.target - s.left) < 0.0015 && Math.abs(s.target + 1 - s.right) < 0.0015 &&
+        Math.abs(s.leftV) + Math.abs(s.rightV) < 0.022 && Math.abs(s.press - s.pressTarget) < 0.001) {
+      s.left = s.target;
+      s.right = s.target + 1;
+      s.leftV = s.rightV = 0;
+      s.press = s.pressTarget;
+      s.last = 0;
+      paint();
+      return;
+    }
+    paint();
+    s.frame = requestAnimationFrame(frame);
+  };
+  const wake = () => {
+    if (s.reduced) settle();
+    else if (!s.frame) s.frame = requestAnimationFrame(frame);
+  };
+  const aim = (next) => {
+    if (next !== s.target) s.direction = Math.sign(next - s.target);
+    s.target = next;
+    wake();
+  };
+  const measure = () => {
+    s.width = trackRef.current?.clientWidth || 0;
+    paint();
+  };
+
+  useLayoutEffect(() => {
+    const track = trackRef.current;
+    // Respect the Windows accessibility preference even though the physics
+    // uses RAF (legacy CSS disables only CSS transitions in reduced mode).
+    const prefers = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const syncPreference = () => {
+      s.reduced = prefers.matches;
+      if (s.reduced) settle();
+    };
+    syncPreference();
+    measure();
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+    if (track) observer?.observe(track);
+    prefers.addEventListener?.('change', syncPreference);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      prefers.removeEventListener?.('change', syncPreference);
+      window.removeEventListener('resize', measure);
+      if (s.frame) cancelAnimationFrame(s.frame);
+      s.frame = s.last = 0;
+    };
+  }, []);
+  useLayoutEffect(() => {
+    if (!s.gesture) aim(level);
   }, [level]);
 
-  useEffect(() => {
-    paint();
-    const onResize = () => paint();
-    window.addEventListener('resize', onResize);
-    return () => { window.removeEventListener('resize', onResize); cancelAnim(thumbRef.current); };
-  }, []);
-
+  const pointerCell = (e) => {
+    const bounds = trackRef.current.getBoundingClientRect();
+    return 3 * (e.clientX - bounds.left) / Math.max(1, bounds.width);
+  };
   const down = (e) => {
-    const tr = trackRef.current;
-    if (!tr) return;
-    const s = state.current;
-    s.dragging = true; s.pull = 0;
-    const cell = (tr.clientWidth || 1) / 3;
-    s.cell = cell;
-    const rect = tr.getBoundingClientRect();
-    const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-    /* 点在哪一格就走到哪一格（不跳变：从当前值滑过去） */
-    const target = Math.max(0, Math.min(2, Math.floor(x / cell)));
-    try { tr.setPointerCapture(e.pointerId); } catch (er) { }
-    cancelAnim(thumbRef.current);
-    if (thumbRef.current) {
-      thumbRef.current.animate(
-        [{ transform: 'translate3d(' + (cell * s.pos + 3) + 'px,0,0)' },
-         { transform: 'translate3d(' + (cell * target + 3) + 'px,0,0)' }],
-        { duration: 200, easing: EASE, fill: 'forwards' });
-    }
-    s.pos = target; force(v => v + 1); paint();
-    if (target !== level) onLevel(target);
+    if (e.button !== 0 || e.isPrimary === false || s.gesture) return;
+    const cell = pointerCell(e);
+    const center = (s.left + s.right) * 0.5;
+    s.ignoreClickUntil = 0;
+    s.gesture = {
+      id: e.pointerId, x: e.clientX, dragging: false,
+      offset: Math.abs(cell - center) <= 0.5 ? cell - center : 0,
+    };
+    s.pressTarget = 0.045;
+    // Capture on the button (not the rail) so an ordinary tap still produces
+    // its native click. Only a real drag suppresses that click.
+    try { e.target.closest('button')?.setPointerCapture?.(e.pointerId); } catch { /* pointer already ended */ }
+    wake();
   };
-
   const move = (e) => {
-    const s = state.current;
-    if (!s.dragging) return;
-    const x = (e.touches ? e.touches[0].clientX : e.clientX);
-    const rect = trackRef.current.getBoundingClientRect();
-    s.pos = Math.max(0, Math.min(2, (x - rect.left - 3) / s.cell));
-    s.pull = 0;
-    paint();
+    const g = s.gesture;
+    if (!g || g.id !== e.pointerId) return;
+    if (!g.dragging && Math.abs(e.clientX - g.x) < 5) return;
+    g.dragging = true;
+    s.pressTarget = 0.075;
+    aim(clampFog(pointerCell(e) - g.offset - 0.5, 0, 2));
   };
-
-  const up = () => {
-    const s = state.current;
-    if (!s.dragging) return;
-    s.dragging = false;
-    const next = Math.max(0, Math.min(2, Math.round(s.pos)));
-    s.pos = next;
-    const th = thumbRef.current;
-    if (th) {
-      const cell = s.cell;
-      cancelAnim(th);
-      th.animate(
-        [{ transform: 'translate3d(' + (cell * s.pos + 3) + 'px,0,0)' },
-         { transform: 'translate3d(' + (cell * next + 3) + 'px,0,0)' }],
-        { duration: 360, easing: EASE, fill: 'forwards' });
-    }
-    force(v => v + 1);
-    paint();
+  const finish = (e, cancel = false) => {
+    const g = s.gesture;
+    if (!g || g.id !== e.pointerId) return;
+    s.gesture = null;
+    s.pressTarget = 0;
+    if (g.dragging) s.ignoreClickUntil = performance.now() + 420;
+    if (cancel || !g.dragging) { aim(level); return; }
+    const next = Math.round(clampFog(pointerCell(e) - g.offset - 0.5, 0, 2));
+    aim(next);
     if (next !== level) onLevel(next);
+  };
+  const select = (e, index) => {
+    if (e.detail && performance.now() < s.ignoreClickUntil) {
+      s.ignoreClickUntil = 0;
+      return;
+    }
+    aim(index);
+    if (index !== level) onLevel(index);
   };
 
   return (
     <div className="fg-seg fg-glass" id="stFogLevel" ref={trackRef}
-      onPointerDown={down} onPointerMove={move} onPointerUp={up}
-      onPointerCancel={up}>
+      role="group" aria-label="背景雾气"
+      onPointerDown={down} onPointerMove={move} onPointerUp={finish}
+      onPointerCancel={(e) => finish(e, true)} onLostPointerCapture={(e) => finish(e, true)}>
       <span className="fg-thumb" ref={thumbRef} aria-hidden="true"></span>
       <div className="fg-cells">
         {FogCore.FOG_LEVELS.map((t, i) => (
           <button key={t} type="button" aria-current={i === level ? 'true' : 'false'}
-            onClick={() => { if (i !== level) onLevel(i); }}>{t}</button>
+            onClick={(e) => select(e, i)}>{t}</button>
         ))}
       </div>
     </div>

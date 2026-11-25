@@ -1,8 +1,8 @@
 [package]
 name = "xiaoliuren"
-version = "1.261113.1"
+version = "1.261125.2"
 edition = "2021"
-description = "小六壬 · 起卦解卦台"
+description = "遂问 · 道家小六壬"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

@@ -1,14 +1,17 @@
-/*
+/* EvidencePane.jsx —— 「断卦依据」折叠区（根节点 `#evi`，外层 `.pane`）； /3 的 React 化
+ *                              ＋ **折叠交互搬进 React**（本文下半段）
  *
+ * 来源（**逐字照抄，不重写**）：`apps/desktop-web/src/legacy/parts/16-script.txt`
  *   · `renderBlocks(B)`   L92–L110 → 每组一个 `.blk`（`.blk-h2`（n/t/d?/caret） + `.blkw > .blk-in > .blk-b > .it*`）
- *   · `renderEvidence(B)` L112–L124 → `.pane > .evi#evi`（`.evi-h#eviH`（caret/t/「N 组 · 每条带出处」/sp/「点开看」）
+ *   · `renderEvidence(B)` L112–L124 → `.pane > .evi#evi`（`.evi-h#eviH`（caret/t/「N 组」/sp/「点开看」）
  *                                     + `.evi-b > .evi-bi`）
  *
  * `.tx` 的写法说明（唯一的 `dangerouslySetInnerHTML`）：legacy 把判据正文 `it.tx` **当 HTML 原样插入**，
- * 并且当有 `it.src` 时把 `<div class="src">出处：…</div>` **拼在 `.tx` 内部**（见 16-script L104–L105）。
+ * （起不再拼出处：`it.src` 留在数据里，只是不上屏。）
  * ⇒ 这里同样拼成一整段 HTML 再插入（若拆成两个 JSX 子节点会多出一个包裹节点，结构就不再等价）。
  *   `escHtml()` = **逐字照抄** legacy 的 `esc()`（16-script L3–L7），只用于 `it.src` 这一处。
  *
+ * ============折叠交互搬进 React ============
  * 逐条对应 18-script 的 `bindResult()` L391–402：
  *   · 点 `#eviH`（整区）→ `#evi` 的 `open` 类取反（源里 `classList.toggle('open')`，**不碰 aria**）。
  *   · 点每组 `.blk-h2` → 该组 `.blk` 的 `open` 类取反，并把 `aria-expanded` 同步成 `'true'/'false'`（源 L400）。
@@ -42,7 +45,7 @@ function renderBlocks(B, openSet, onToggleBlk) {
             <div className="it" key={j}>
               <div className="lb">{it.lb}</div>
               <div className="tx" dangerouslySetInnerHTML={{
-                __html: it.tx + (it.src ? '<div class="src">出处：' + escHtml(it.src) + '</div>' : '')
+                __html: it.tx
               }}></div>
             </div>
           ))}
@@ -53,14 +56,17 @@ function renderBlocks(B, openSet, onToggleBlk) {
 }
 
 export default function EvidencePane({ B }) {
-  const n = (B || []).length;
+  /* 「各条出处不要显示」。
+     ⛔ 只过滤显示层——B 本身（含 I 组）照旧交给 plainAll / 提示词，判据一份不少。 */
+  const LIST = (B || []).filter(function (b) { return b && b.n !== 'I'; });
+  const n = LIST.length;
   const [openAll, setOpenAll] = useState(false);
   const [openSet, setOpenSet] = useState({});
   const [seenB, setSeenB] = useState(B);
   /* 新一卦 ⇒ 回到收起态（React 官方「渲染期按 props 重置 state」写法；提交前发生，不闪一帧） */
   if (seenB !== B) { setSeenB(B); setOpenAll(false); setOpenSet({}); }
   useEffect(function () {
-    try { const a = window.__xlrShell; if (a && a.fxOwn) a.fxOwn('eviFold'); } catch (e) { }
+    try { const a = window.__xlrShell; if (a && a.s3bOwn) a.s3bOwn('eviFold'); } catch (e) { }
   }, []);
   const onToggleBlk = (i) => setOpenSet((s) => { const nx = Object.assign({}, s); nx[i] = !nx[i]; return nx; });
   return (
@@ -69,11 +75,11 @@ export default function EvidencePane({ B }) {
         <div className="evi-h" id="eviH" onClick={() => setOpenAll((v) => !v)}>
           <span className="caret">▶</span>
           <span className="t">断卦依据</span>
-          <span className="n">{`${n} 组 · 每条带出处`}</span>
+          <span className="n">{`${n} 组`}</span>
           <span className="sp"></span>
           <span className="n">点开看</span>
         </div>
-        <div className="evi-b"><div className="evi-bi">{renderBlocks(B, openSet, onToggleBlk)}</div></div>
+        <div className="evi-b"><div className="evi-bi">{renderBlocks(LIST, openSet, onToggleBlk)}</div></div>
       </div>
     </div>
   );

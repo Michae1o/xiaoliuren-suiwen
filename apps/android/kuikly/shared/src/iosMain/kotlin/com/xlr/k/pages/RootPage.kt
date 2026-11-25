@@ -579,6 +579,18 @@ private fun RootScreen() {
            「解完卦滑回壹页，有概率壹页元素全没、只剩背景」）。这里读的是 State，才跟得住。
            ⚠ 卡片该露的判据 = 壹页还占着屏幕（轨道位移没到 -w）+ 没有整屏遮罩。 */
         if (iosOnly()) {
+            val recallHome by remember {
+                androidx.compose.runtime.derivedStateOf {
+                    step == XlrStep.YI && wPx > 0f && !settling && abs(posX) < 1f &&
+                        !Session.splashOn && !Session.guideOn && Session.guideZoom == null &&
+                        !Session.settingsOpen && !Session.settingsSwiping && !Session.skinMenuOpen &&
+                        !Session.recordsOpen && !Session.recDragging && Session.recProg < .01f &&
+                        !Session.bgOpen && !Session.detailOpen && !Session.moreOpen && Session.picker == null &&
+                        !CardSelection.active && !CastFx.playing && !Session.errOn && Session.toast.isEmpty() &&
+                        Session.imeLayout < .5f
+                }
+            }
+            IosRecallIdleGate(recallHome)
             val cardNearYi by remember {
                 androidx.compose.runtime.derivedStateOf {
                     wPx <= 0f || (if (settling) settle.value else posX) > -(wPx - 2f)
@@ -634,6 +646,7 @@ private var backArmedAt = 0L
 internal var pageScope: kotlinx.coroutines.CoroutineScope? = null
 
 internal fun handleBack(): Boolean {
+    if (IosRecall.close()) return true
     // Back first leaves text selection, not the detail/page containing it.
     if (CardSelection.active) { CardSelection.cancel(); return true }
     if (Session.guideZoom != null) {

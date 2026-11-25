@@ -23,6 +23,8 @@ import { createPortal, flushSync } from 'react-dom';
 import { useEffect, useState } from 'react';
 import Splash from '../components/Splash.jsx';
 import SettingsScreen from '../components/SettingsScreen.jsx';
+import Huiguan from '../components/Huiguan.jsx';
+import huiguanCss from '../styles/huiguan.css?inline';
 /* 小智 MCP 接入（设置 → MCP接入）。只在模块里建一条 WS，不挂 DOM、不引样式。 */
 import { McpBridge } from '../data/mcpBridge.js';
 import UpdateTip from '../components/UpdateTip.jsx';
@@ -276,6 +278,7 @@ function mountSetDot() {
 mountSetDot();
 
 /* ============  批 变更记录：皮肤三件 ＋ 首屏主题改由本仓这套跑 ============
+ * 背景：皮肤与明暗必须在**画第一帧之前**定到 html 上
  *   （否则先按默认皮肤画一遍再切 ⇒ 看得见的闪一下）；本仓 React 产物全是 defer 模块、赶不上第一帧
  *   ⇒ 「定首屏皮肤」那一句由 `src/data/skinPrepaint.js`（**经典脚本**，`32-script` 逐字切片）
  *     承担，由产出链 `tools/make-doc-entry.mjs` **内联进文档**（解析期执行，与今天同一时机）。
@@ -613,6 +616,26 @@ mountSplash();
  *
  */
 
+/* Independent top-layer dialog keeps whichever entry surface was open.
+   Records and About do not co-own its Escape handling or backing state. */
+let huiguanRoot = null, huiguanOpen = false;
+function openHuiguan(trigger, prior = null) {
+  if (huiguanOpen) return;
+  huiguanOpen = true;
+  if (!huiguanRoot) {
+    const host = document.createElement('div');
+    host.dataset.xlroot = 'huiguan';
+    host.style.display = 'contents';
+    document.body.appendChild(host);
+    huiguanRoot = createRoot(host);
+  }
+  const now = new Date();
+  huiguanRoot.render(<>
+    <style>{huiguanCss}</style>
+    <Huiguan records={RecordsStore.loadCases()} now={now} prior={prior} trigger={trigger}
+      onClose={() => { huiguanOpen = false; huiguanRoot.render(null); }} />
+  </>);
+}
 let settingsRoot = null, settingsHost = null, settingsOpen = false;
 /* ★
    自动检查查到的清单条目先存在这儿，点「去更新」时随 render 一并交给设置页 ——
@@ -621,7 +644,7 @@ let pendingUpdate = null;
 function paintSettings() {
   if (settingsRoot) {
     settingsRoot.render(
-      <SettingsScreen open={settingsOpen} preload={pendingUpdate} onClose={() => setSettingsOpen(false)} />
+      <SettingsScreen open={settingsOpen} preload={pendingUpdate} onHuiguan={openHuiguan} onClose={() => setSettingsOpen(false)} />
     );
   }
 }
@@ -936,8 +959,12 @@ function mountRecords() {
      绕过上面这个口子、直改 DOM。抽屉开着时在 window 捕获阶段先接过来（走 React），并 `stopPropagation`
      让 legacy 那条收不到 —— 这样 Esc 也是 React 统一入口，不会再把状态留在「开」。 */
   window.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape' || !recordsOpen) return;
+    if (e.key !== 'Escape' || !recordsOpen || document.querySelector('.hg-dialog[open]')) return;
     e.preventDefault(); e.stopPropagation();
+    const trashBack = recordsPortalHost?.querySelector('[data-trash-esc]');
+    if (trashBack) { trashBack.click(); return; }
+    const searchClose = recordsPortalHost?.querySelector('[data-search-esc]');
+    if (searchClose) { searchClose.click(); return; }
     st.escClosed += 1; st.lastCloseBy = 'esc'; setRecordsOpen(false);
   }, true);
   /* ★ 重定向 legacy 的渲染入口（**不是置空**；等价性来源见 原记录：React 承接 L154–159 四类写入） */
@@ -1099,7 +1126,7 @@ mountRecords();
 
 let mainRoot = null, mainEl = null;
 let mainState = { c: null, B: null };
-function paintMain() { if (mainRoot && mainEl) mainRoot.render(createPortal(<SafeZone what="结果"><RightPane c={mainState.c} B={mainState.B} /></SafeZone>, mainEl)); }
+function paintMain() { if (mainRoot && mainEl) mainRoot.render(createPortal(<SafeZone what="结果"><RightPane c={mainState.c} B={mainState.B} onHuiguan={openHuiguan} /></SafeZone>, mainEl)); }
 /** 渲染用（**同步**提交：legacy 链紧接着就要按 id/class 找节点） */
 function renderMain(c, B) { mainState = { c, B }; if (mainRoot) flushSync(() => paintMain()); }
 

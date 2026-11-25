@@ -295,6 +295,7 @@ internal fun goConfig() {
     Session.settingsOpen = true
     Session.settingsPage = ""
     Session.settingsTab = "llm"
+    LlmGuideHandoff.requestReveal()
 }
 
 /** 首次进来自动弹一次（旧 maybeWelcome：开屏在场时不弹；看过就不再弹） */

@@ -167,7 +167,7 @@ internal fun PlatformIos.installMisc() {
 private fun shareText(name: String, text: String): String? {
     if (text.isEmpty()) return null
     /* 先落到 App 自己的 Documents（Info.plist 开了 UIFileSharingEnabled，
-       用户能在「文件」App → 我的 iPhone → 卦台 里看到、拷进 iCloud），
+       用户能在「文件」App → 我的 iPhone → 遂问 里看到、拷进 iCloud），
        再把这个文件本身交给分享面板 —— 比分享一串纯文本更容易存成 .json。 */
     val saved = saveToDocuments(name, text)
     dispatch_async(dispatch_get_main_queue()) {

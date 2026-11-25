@@ -1,0 +1,22 @@
+.hg-dialog .hg-spring-effect {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.hg-dialog .hg-spring-band {
+  position: absolute;
+  top: 39%;
+  bottom: 39%;
+  left: -12%;
+  right: -12%;
+  mask-image: linear-gradient(90deg, transparent, #000 28%, #000 72%, transparent);
+}
+.hg-dialog .hg-spring-band-top {
+  background: linear-gradient(0deg, transparent 6%, #e2eac443 37%, #fff7d87f 49%, #e2eac43a 60%, transparent 94%);
+}
+.hg-dialog .hg-spring-band-bottom {
+  background: linear-gradient(0deg, transparent 6%, #d7e9e337 38%, #f4f6de76 49%, #d7e9e338 62%, transparent 94%);
+}
+.hg-dialog .hg-spring-balance { position:absolute; inset:0; }

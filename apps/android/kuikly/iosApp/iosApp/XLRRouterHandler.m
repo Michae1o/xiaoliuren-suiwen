@@ -10,7 +10,7 @@
 - (void)openPageWithName:(NSString *)pageName
                 pageData:(NSDictionary *)pageData
               controller:(UIViewController *)controller {
-    /* 卦台是单页应用：共享层内部的「页」是 Compose 组合里的切换，不走原生路由。
+    /* 遂问是单页应用：共享层内部的「页」是 Compose 组合里的切换，不走原生路由。
        真跳到别的 Kuikly 页面时才建一个新容器。 */
     UIViewController *vc = [[XLRRenderViewController alloc] initWithPageName:pageName pageData:pageData];
     if (controller.navigationController) {

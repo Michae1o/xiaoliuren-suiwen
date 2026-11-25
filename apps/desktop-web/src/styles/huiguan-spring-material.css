@@ -1,0 +1,27 @@
+.hg-dialog .hg-spring-photo-backdrop{position:absolute;inset:0;overflow:hidden;z-index:-1;pointer-events:none;user-select:none}
+.hg-dialog .hg-spring-photo-photo{position:absolute;display:block;height:auto;overflow:hidden;pointer-events:none}
+.hg-dialog .hg-spring-photo-flight{position:absolute;width:clamp(81px,14vw,219px);top:14%;left:55%}
+.hg-dialog .hg-spring-photo-swallows-main{top:0;left:0;width:100%}
+.hg-dialog .hg-spring-photo-flight-rim{filter:brightness(0) invert(.86) blur(1.1px); scale:1.020}
+.hg-dialog .hg-spring-photo-blossoms-main{width:clamp(210px,34%,489px);left:-6%;top:-13%;scale:-1 1;
+ mask-image:radial-gradient(ellipse 94% 96% at 59% 11%,#000 31%,#000e 64%,#0009 82%,transparent 100%)}
+.hg-dialog .hg-spring-photo-prism{
+ position:absolute;top:-9%;left:4%;width:clamp(106px,23%,336px);height:clamp(71px,18%,174px);
+ border-radius:50%;filter:blur(13px);transform:rotate(-13deg);
+ background:radial-gradient(ellipse at 45% 56%,#fff1eaa1 0%,#e9caef80 15%,#d1f8e34d 27%,transparent 54%);
+ mask-image:radial-gradient(ellipse 73% 73% at 22% 28%,#000,transparent 100%)
+}
+.hg-dialog .hg-spring-photo-cloudbreak-main,.hg-dialog .hg-spring-photo-cloudbreak-warm{left:-4%;top:0%;width:clamp(420px,86%,1850px)}
+.hg-dialog .hg-spring-photo-cloudbreak-main{
+ mask-image:radial-gradient(ellipse var(--hg-spring-photo-aperture,90%) 81% at 32% 1%,#000 31%,#000d 49%,#0006 72%,transparent 100%)}
+.hg-dialog .hg-spring-photo-cloudbreak-warm{
+ mask-image:radial-gradient(ellipse 73% 49% at 57% 62%,#000 27%,#000d 48%,#0006 74%,transparent 100%)}
+.hg-dialog .hg-spring-photo-warm-residue{position:absolute;width:84%;height:35%;top:-11%;left:-4%;
+ background:radial-gradient(ellipse 64% 77% at 23% 23%,#ffd18fac 6%,#f2c29371 25%,#dfac6a32 43%,transparent 76%)}
+@media(max-width:690px),(max-aspect-ratio:1/1) {
+ .hg-dialog .hg-spring-photo-flight{left:57%;width:clamp(73px,20vw,127px);top:15.5%}
+ .hg-dialog .hg-spring-photo-blossoms-main{width:clamp(153px,47%,367px);top:-5.5%;left:-5%}
+ .hg-dialog .hg-spring-photo-prism{top:-5%;left:1%}
+  .hg-dialog .hg-spring-photo-cloudbreak-main,.hg-dialog .hg-spring-photo-cloudbreak-warm{width:clamp(310px,95%,620px);top:1%;left:-5%}
+ .hg-dialog .hg-spring-photo-warm-residue{height:24%;top:-7%}
+}

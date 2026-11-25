@@ -14,23 +14,25 @@ import { GONG } from '@xlr/shared-judgment';
 import GuaCard from './GuaCard.jsx';
 import DivinationPane from './DivinationPane.jsx';
 import EvidencePane from './EvidencePane.jsx';
+import HuiguanReminder from './HuiguanReminder.jsx';
 
-function BlankPane() {
+function BlankPane({ onHuiguan }) {
   return (
-    <div className="pane blank" id="blank">
+    <div className="pane blank" id="blank" tabIndex={-1}>
       <div className="blank-band">
         {GONG.map((g, i) => (<span key={g}><i>{i + 1}</i>{g}</span>))}
       </div>
       <div className="blank-body">
         <p className="k">左边写好问题 → 起卦。<br />六宫会从大安起数，一格一格走到落宫。</p>
         <p className="r">起卦与断卦依据在本机算，不联网。<br />断辞那一步可以接模型。</p>
+        <HuiguanReminder onOpen={onHuiguan} />
       </div>
     </div>
   );
 }
 
-export default function RightPane({ c, B }) {
-  if (!c) return <BlankPane />;
+export default function RightPane({ c, B, onHuiguan }) {
+  if (!c) return <BlankPane onHuiguan={onHuiguan} />;
   return (
     <>
       <GuaCard c={c} />

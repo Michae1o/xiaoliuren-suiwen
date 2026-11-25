@@ -10,9 +10,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import com.tencent.kuikly.compose.ui.layout.onSizeChanged
-import com.tencent.kuikly.compose.ui.platform.LocalDensity
 import com.tencent.kuikly.compose.ui.semantics.Role
+import com.tencent.kuikly.compose.ui.semantics.clearAndSetSemantics
+import com.tencent.kuikly.compose.ui.semantics.onClick
+import com.tencent.kuikly.compose.ui.semantics.role
+import com.tencent.kuikly.compose.ui.semantics.selected
+import com.tencent.kuikly.compose.ui.semantics.semantics
 import com.tencent.kuikly.compose.foundation.selection.toggleable
+import com.tencent.kuikly.compose.coil3.rememberAsyncImagePainter
+import com.tencent.kuikly.compose.foundation.Image
+import com.tencent.kuikly.compose.foundation.Canvas
 import com.tencent.kuikly.compose.foundation.background
 import com.tencent.kuikly.compose.foundation.border
 import com.tencent.kuikly.compose.foundation.layout.size
@@ -38,7 +45,11 @@ import com.tencent.kuikly.compose.animation.core.animateFloatAsState
 import com.tencent.kuikly.compose.animation.core.tween
 import com.tencent.kuikly.compose.foundation.gestures.detectHorizontalDragGestures
 import com.tencent.kuikly.compose.foundation.layout.offset
+import com.tencent.kuikly.compose.ui.geometry.CornerRadius
+import com.tencent.kuikly.compose.ui.geometry.Offset
+import com.tencent.kuikly.compose.ui.geometry.Size
 import com.tencent.kuikly.compose.ui.graphics.Color
+import com.tencent.kuikly.compose.ui.graphics.drawscope.Stroke
 import com.tencent.kuikly.compose.ui.graphics.graphicsLayer
 import com.tencent.kuikly.compose.ui.input.pointer.pointerInput
 
@@ -50,53 +61,7 @@ import com.tencent.kuikly.compose.ui.input.pointer.pointerInput
 internal fun SkinPage() {
     LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
         item {
-            /* 此前：原来那两句「点一下立刻生效…」「浅色九套都在这儿…」删掉 ——
-               皮肤格自己看得懂，说明字反而占屏、还把第一屏的卡压下去 */
-            /* 明暗：照早期版本 #btnDN 的口径 —— 切到夜就是切到深色那套（黑夜 / 莫高窟），点亮则回上次的浅色套 */
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(veil(0.42f))
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text_(text = "日夜", fontSize = 13f, lineHeight = 21f, weight = 500)
-                    Text_(
-                        text = if (Skin.dark) "现在是深色（" + Skin.def.name + "）" else "现在是浅色（" + Skin.def.name + "）",
-                        fontSize = 11f,
-                        lineHeight = 18f,
-                        color = KY_DIM2,
-                    )
-                }
-                SetBtn(label = if (Skin.dark) "切到白天" else "切到黑夜", small = true) { Skin.toggleDayNight() }
-            }
-
-            Column(
-                Modifier.fillMaxWidth().padding(bottom = 12.dp)
-                    .clip(RoundedCornerShape(12.dp)).background(veil(0.42f))
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-            ) {
-                Text_("背景雾气", fontSize = 13f, lineHeight = 21f, weight = 500)
-                Spacer(Modifier.height(10.dp))
-                FogLevelControl()
-                Spacer(Modifier.height(8.dp))
-                val hint = when {
-                    Skin.fogLevel == 0 -> "淡雾静置，减少动态消耗。"
-                    Skin.fogLevel == 1 -> "雾气沿平滑路径缓缓游移。"
-                    !realtimeFogAvailable() -> "当前系统使用轻柔流动，实时流雾需要 Android 13 或以上。"
-                    else -> "雾形持续变化、交织流动。"
-                }
-                Text_(hint, fontSize = 11f, lineHeight = 18f, color = KY_DIM2)
-                if (Skin.fogLevel > 0) {
-                    Spacer(Modifier.height(12.dp))
-                    Box(Modifier.fillMaxWidth().height(0.5.dp).background(KY_LINE))
-                    FogFreezeControl()
-                }
-            }
-
+            SetSecTitle("主题", top = 0)
             var i = 0
             while (i < SKINS.size) {
                 val a = SKINS[i]
@@ -110,41 +75,93 @@ internal fun SkinPage() {
                 }
                 i += 2
             }
+
+            Spacer(Modifier.height(10.dp))
+            SetSecTitle("显示", top = 0)
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                    .background(veil(0.42f)).border(Skin.borderW, KY_LINE, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text_("日夜", fontSize = 13f, lineHeight = 20f, weight = 600)
+                        Text_(if (Skin.dark) "深色 · " + Skin.def.name else "浅色 · " + Skin.def.name,
+                            fontSize = 11f, lineHeight = 17f, color = KY_DIM2)
+                    }
+                    SetBtn(if (Skin.dark) "切到白天" else "切到黑夜", small = true) { Skin.toggleDayNight() }
+                }
+                Spacer(Modifier.height(12.dp))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(KY_LINE))
+                Spacer(Modifier.height(12.dp))
+                Text_("背景雾气", fontSize = 13f, lineHeight = 20f, weight = 600)
+                Spacer(Modifier.height(8.dp))
+                FogLevelControl()
+                Spacer(Modifier.height(6.dp))
+                val hint = when {
+                    Skin.fogLevel == 0 -> "淡雾静置，减少动态消耗。"
+                    Skin.fogLevel == 1 -> "雾气沿平滑路径缓缓游移。"
+                    !realtimeFogAvailable() -> "当前系统使用轻柔流动，实时流雾需要 Android 13 或以上。"
+                    else -> "雾形持续变化、交织流动。"
+                }
+                Text_(hint, fontSize = 11f, lineHeight = 17f, color = KY_DIM2)
+                if (Skin.fogLevel > 0) {
+                    Spacer(Modifier.height(12.dp))
+                    Box(Modifier.fillMaxWidth().height(0.5.dp).background(KY_LINE))
+                    FogFreezeControl()
+                }
+            }
             Spacer(modifier = Modifier.height(30.dp))
         }
     }
 }
 
-/** 一格皮肤：底色当小块、强调色当点，名字 + 副标题照早期版本清单 */
+/** 用真实主题色与该套北斗素材画一个静态预览，不启动开屏动画。 */
 @Composable
 private fun SkinTile(d: SkinDef) {
     val on = d.key == Skin.cur
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (on) KY_ACCENT_BG else veil(0.42f))
-            .border(Skin.borderW, if (on) KY_ACCENT_LINE else KY_LINE, RoundedCornerShape(12.dp))
-            .tapNoIndication { Skin.apply(d.key) }
-            .padding(horizontal = 12.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    val corner = RoundedCornerShape(12.dp)
+    Column(
+        Modifier.fillMaxWidth().clip(corner)
+            .background(veil(0.42f))
+            .semantics(mergeDescendants = true) {
+                role = Role.RadioButton
+                selected = on
+                onClick { Skin.apply(d.key); true }
+            }
+            .tapNoIndication { Skin.apply(d.key) },
     ) {
-        /* 小样：迷你卡（底色 / 卡 / 主色三件） */
-        SkinSwatch(d, w = 22.dp, h = 26.dp)
-        Spacer(modifier = Modifier.width(10.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            /* ⚠ 文字用**当前皮肤**的墨色（不是被预览那套的 ink）——否则在深色卡上，
-               深色皮肤的深墨名字会看不见（敦煌在黑夜底上就是一片灰） */
-            Text_(
-                text = d.name,
-                fontSize = 13f,
-                lineHeight = 20f,
-                weight = if (on) 600 else 500,
-                color = if (on) KY_ACCENT else KY_INK,
+        Box(Modifier.fillMaxWidth().height(59.dp).background(d.bg)) {
+            Column(Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 9.dp)) {
+                Box(Modifier.width(23.dp).height(2.dp).background(d.accent))
+                Spacer(Modifier.height(7.dp))
+                Column(Modifier.width(54.dp).height(31.dp).clip(RoundedCornerShape(5.dp))
+                    .background(d.surface).border(0.5.dp, d.line2, RoundedCornerShape(5.dp))
+                    .padding(horizontal = 6.dp, vertical = 6.dp)) {
+                    Box(Modifier.width(14.dp).height(2.dp).background(d.ink))
+                    Spacer(Modifier.height(5.dp))
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(d.line2))
+                }
+            }
+            Image(
+                painter = rememberAsyncImagePainter("assets://splash-orbit/${d.key}/north.png"),
+                contentDescription = null,
+                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 6.dp).size(61.dp, 48.dp),
             )
-            Text_(text = d.tag, fontSize = 10.5f, lineHeight = 17f, color = KY_DIM2)
         }
-        if (on) Text_(text = "当前", fontSize = 11f, lineHeight = 18f, color = KY_ACCENT)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text_(d.name, fontSize = 13f, lineHeight = 19f, weight = 600)
+                Text_(d.tag, fontSize = 10.5f, lineHeight = 15f, color = KY_DIM2)
+            }
+            if (on) {
+                Box(Modifier.size(19.dp).clip(RoundedCornerShape(10.dp)).background(KY_ACCENT_BG).clearAndSetSemantics { },
+                    contentAlignment = Alignment.Center) {
+                    Text_("✓", fontSize = 12f, lineHeight = 16f, weight = 700, color = KY_ACCENT)
+                }
+            }
+        }
     }
 }
 
@@ -152,11 +169,51 @@ private fun SkinTile(d: SkinDef) {
 @Composable
 internal fun DataPage() {
     var msg by remember { mutableStateOf("") }
+    var cleanupMsg by remember { mutableStateOf("") }
     var ver by remember { mutableStateOf(0) }
-    val caseN = androidx.compose.runtime.remember(ver) { RecStore.load().size }
-    val ruleN = androidx.compose.runtime.remember(ver) { RecStore.loadRules().size }
+    val caseN = remember(ver, RecStore.caseRevision) { RecStore.load().size }
+    val ruleN = remember(ver, RecStore.ruleRevision) { RecStore.loadRules().size }
+    var rulesArmed by remember { mutableStateOf(false) }
+    LaunchedEffect(rulesArmed, ruleN > 0) {
+        if (rulesArmed) {
+            if (ruleN > 0) kotlinx.coroutines.delay(4000)
+            rulesArmed = false
+        }
+    }
     LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
         item {
+            SetSecTitle("保存位置", top = 0)
+            /* 保存位置
+               设过 ⇒ 导出直接写进那个文件夹，不再每次弹面板；没设 ⇒ 空着，导出时弹系统「保存到…」 */
+            var dirLabel by remember { mutableStateOf(Platform.exportDirLabel?.invoke()) }
+            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+                Text_(
+                    text = dirLabel ?: "没设，导出时自己选",
+                    fontSize = 11f,
+                    lineHeight = 18f,
+                    color = if (dirLabel == null) KY_DIM2 else KY_DIM,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SetBtn(if (dirLabel == null) "选文件夹" else "改位置") {
+                        Platform.pickExportDir?.invoke { lbl -> if (lbl != null) dirLabel = lbl }
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    SetBtn("打开文件夹", enabled = dirLabel != null) {
+                        Platform.openExportDir?.invoke()
+                    }
+                    if (dirLabel != null) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        SetBtn("恢复默认", small = true) {
+                            Platform.resetExportDir?.invoke()
+                            dirLabel = null
+                        }
+                    }
+                }
+            }
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(KY_LINE))
+            Spacer(Modifier.height(14.dp))
+            SetSecTitle("备份与恢复", top = 0)
             SetDataRow(
                 title = "卦例本",
                 sub = "记下来的卦。标过「应验/没应验」的，会在下次解卦时一并交给模型作校准。",
@@ -169,12 +226,6 @@ internal fun DataPage() {
                         ver++
                     }
                 },
-                onClear = {
-                    RecStore.clearAll()
-                    msg = "卦例本已清空（进了回收站，能捞回来）"
-                    ver++
-                },
-                canClear = caseN > 0,
             )
             SetDataRow(
                 title = "准则",
@@ -188,12 +239,6 @@ internal fun DataPage() {
                         ver++
                     }
                 },
-                onClear = {
-                    RecStore.clearRules()
-                    msg = "准则已清空（卦例本不受影响）"
-                    ver++
-                },
-                canClear = ruleN > 0,
             )
             SetDataRow(
                 title = "旧数据导入",
@@ -236,39 +281,33 @@ internal fun DataPage() {
                         ver++
                     }
                 },
-                onClear = {},
-                hideClear = true,
             )
-            /* 保存位置
-               设过 ⇒ 导出直接写进那个文件夹，不再每次弹面板；没设 ⇒ 空着，导出时弹系统「保存到…」 */
-            var dirLabel by remember { mutableStateOf(Platform.exportDirLabel?.invoke()) }
-            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
-                Text_(text = "保存位置", fontSize = 13.5f, lineHeight = 22f, weight = 500)
-                Text_(
-                    text = dirLabel ?: "没设，导出时自己选",
-                    fontSize = 11f,
-                    lineHeight = 18f,
-                    color = if (dirLabel == null) KY_DIM2 else KY_DIM,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    SetBtn(if (dirLabel == null) "选文件夹" else "改位置") {
-                        Platform.pickExportDir?.invoke { lbl -> if (lbl != null) dirLabel = lbl }
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    SetBtn("打开文件夹", enabled = dirLabel != null) {
-                        Platform.openExportDir?.invoke()
-                    }
-                    if (dirLabel != null) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        SetBtn("恢复默认", small = true) {
-                            Platform.resetExportDir?.invoke()
-                            dirLabel = null
-                        }
-                    }
+            if (msg.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text_(msg, fontSize = 11.5f, lineHeight = 19f, color = KY_ACCENT, weight = 500)
+            }
+            Spacer(Modifier.height(16.dp))
+            SetSecTitle("清理与重置", top = 0)
+            DataActionRow("清空卦例本", "卦例移入回收站，可恢复。", "清空", enabled = caseN > 0) {
+                RecStore.clearAll()
+                cleanupMsg = "卦例本已清空（进了回收站，能捞回来）"
+                ver++
+            }
+            DataActionRow(
+                "清空准则",
+                if (rulesArmed) "清空后无法恢复；卦例本不受影响。" else "清空复盘确认过的准则，不影响卦例本。",
+                if (rulesArmed) "确认清空" else "清空",
+                enabled = ruleN > 0,
+            ) {
+                if (rulesArmed) {
+                    rulesArmed = false
+                    RecStore.clearRules()
+                    cleanupMsg = "准则已清空（卦例本不受影响）"
+                    ver++
+                } else {
+                    rulesArmed = true
                 }
             }
-            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(KY_LINE))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -300,15 +339,15 @@ internal fun DataPage() {
                         LlmStore.clear()
                         RecStore.wipeCases()
                         resetArm = false
-                        msg = "✓ 已重置：模型配置、卦例本都清空了"
-                        Session.say(msg)
+                        cleanupMsg = "✓ 已重置：模型配置、卦例本都清空了"
+                        Session.say(cleanupMsg)
                         ver++
                     }
                 }
             }
-            if (msg.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Text_(text = msg, fontSize = 11.5f, lineHeight = 19f, color = KY_ACCENT, weight = 500)
+            if (cleanupMsg.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text_(cleanupMsg, fontSize = 11.5f, lineHeight = 19f, color = KY_ACCENT, weight = 500)
             }
             Spacer(modifier = Modifier.height(30.dp))
         }
@@ -329,10 +368,7 @@ private fun SetDataRow(
     count: String,
     canExport: Boolean,
     onExport: () -> Unit,
-    onClear: () -> Unit,
     exportLabel: String = "导出",
-    hideClear: Boolean = false,
-    canClear: Boolean = false,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -348,13 +384,23 @@ private fun SetDataRow(
         Spacer(modifier = Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             SetBtn(exportLabel, enabled = canExport, onClick = onExport)
-            if (!hideClear) {
-                Spacer(modifier = Modifier.width(8.dp))
-                SetBtn("清空", enabled = canClear, danger = true, onClick = onClear)
-            }
         }
     }
     Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(KY_LINE))
+}
+
+@Composable
+private fun DataActionRow(title: String, sub: String, action: String, enabled: Boolean, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text_(title, fontSize = 13.5f, lineHeight = 22f, weight = 500)
+            Text_(sub, fontSize = 11f, lineHeight = 18f, color = KY_DIM2)
+        }
+        Spacer(Modifier.width(8.dp))
+        SetBtn(action, enabled = enabled, small = true, danger = true,
+            modifier = Modifier.width(76.dp), keepDisabledDangerOutline = true, onClick = onClick)
+    }
+    Box(Modifier.fillMaxWidth().height(1.dp).background(KY_LINE))
 }
 
 /* ---------------- 关于 ---------------- */
@@ -367,10 +413,8 @@ internal fun AboutPage() {
 
     LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
         item {
-            /* 旧 SettingsScreen.jsx L1194：一行 `<b>道家小六壬 · 卦台</b>　<span>v…</span>`，
-               `.about p` 12.5 / line-height 2，名字走 ink、其余走 dim（不是两行、也不是 15 号大字） */
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text_(text = "遂问", fontSize = 12.5f, lineHeight = 25f, color = KY_INK, weight = 500)
+                Text_(text = "遂问", fontSize = 20f, lineHeight = 28f, color = KY_INK, weight = 600)
                 Text_(
                     text = "　v" + (Platform.version ?: "0.1"),
                     fontSize = 12.5f,
@@ -379,6 +423,12 @@ internal fun AboutPage() {
                 )
             }
             Spacer(modifier = Modifier.height(10.dp))
+
+            SetSecTitle("回观")
+            Text_("按周或月回顾本机卦例。", fontSize = 11.5f, lineHeight = 18f, color = KY_DIM2)
+            Spacer(Modifier.height(8.dp))
+            SetBtn("打开回观", primary = true) { RecallScreen.enterFromAbout() }
+            Spacer(Modifier.height(12.dp))
 
             /* ★ app 内更新（早期版本这一栏只有版本号 + 更新入口；简介/免责已搬「说明」栏） */
             if (Upd.available) {
@@ -459,6 +509,31 @@ internal fun AboutPage() {
             Spacer(modifier = Modifier.height(10.dp))
             Text_(text = "三条前提：无事不卦、心动即卦、一事不二卦。", fontSize = 12f, lineHeight = 21f, weight = 500)
 
+            Spacer(modifier = Modifier.height(18.dp))
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(KY_LINE))
+            SetSecTitle("回观 · 星图与口径", top = 14)
+            Text_(
+                "宋代皇祐天图复原（约 1052 年）。星官与宿距：孙殳玮，Stellarium 中国宋代星空 v26.2；星位与星等：David Nash / Astronomy Nexus，HYG v4.1。星图数据及衍生图以 CC BY-SA 4.0 授权，并非实时星空。",
+                fontSize = 11.5f, lineHeight = 20f, color = KY_DIM,
+            )
+            Spacer(modifier = Modifier.height(7.dp))
+            Text_(
+                "回观只读本机卦例；历史星点与卦例亮点分开。卦例亮点超过 72 枚时做抽样，显示的统计数字仍是全量。",
+                fontSize = 11.5f, lineHeight = 20f, color = KY_DIM,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            SetBtn("宋代星空数据", small = true) {
+                Platform.openUrl?.invoke("https://github.com/Stellarium/stellarium/blob/v26.2/skycultures/chinese_song_dynasty/description.md")
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            SetBtn("HYG 星表", small = true) {
+                Platform.openUrl?.invoke("https://github.com/astronexus/HYG-Database/blob/main/hyg/README.md")
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            SetBtn("CC BY-SA 4.0 许可", small = true) {
+                Platform.openUrl?.invoke("https://creativecommons.org/licenses/by-sa/4.0/")
+            }
+
             Spacer(modifier = Modifier.height(30.dp))
         }
     }
@@ -469,7 +544,7 @@ internal fun AboutPage() {
 internal fun FaqPage() {
     var openQ by remember { mutableStateOf("") }
     LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
-        item { SetLead("点一下问题，看怎么办。") }
+        item { SetSecTitle("使用答疑", top = 0); SetHint("轻点问题展开答案。") }
         items(FAQ_ITEMS) { it ->
             val on = openQ == it.q
             Column(
@@ -483,6 +558,7 @@ internal fun FaqPage() {
                         text = it.q,
                         fontSize = 13f,
                         lineHeight = 21f,
+                        weight = if (on) 600 else 500,
                         modifier = Modifier.weight(1f),
                     )
                     Text_(
@@ -525,13 +601,17 @@ internal fun NotePage() {
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(Modifier.height(10.dp))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(KY_LINE))
+            Spacer(Modifier.height(12.dp))
             SetSecTitle("联系作者", top = 0)
             Text_(text = "软件使用反馈：微信 Trick_Mage", fontSize = 12f, lineHeight = 21f, color = KY_DIM)
             Text_(text = "小六壬交流：微信 gny950107", fontSize = 12f, lineHeight = 21f, color = KY_DIM)
             Text_(text = "添加请注明来意。", fontSize = 12f, lineHeight = 21f, color = KY_DIM2)
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(Modifier.height(10.dp))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(KY_LINE))
+            Spacer(Modifier.height(12.dp))
             SetSecTitle("开源仓库", top = 0)
             /* 早期版本这里是 <a href> 走 openOut 交系统浏览器（SettingsScreen.jsx:1202）⇒ K 里必须可点，
                Platform.openUrl 早就接了（引导里的智谱链接在用），这里直接用 */
@@ -635,37 +715,52 @@ internal fun GlassSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
 private fun FogLevelControl() {
     val level = Skin.fogLevel
     val position = remember { Animatable(level.toFloat()) }
-    val scope = rememberCoroutineScope()
     var dragging by remember { mutableStateOf(false) }
-    var pull by remember { mutableStateOf(0f) }
+    var dragPosition by remember { mutableStateOf<Float?>(null) }
+    var request by remember { mutableStateOf(0) }
     val press by animateFloatAsState(if (dragging) 1f else 0f, tween(if (dragging) 100 else 420, easing = KY_EASE_OUT))
-    val stretch by animateFloatAsState(if (dragging) pull else 0f, tween(160, easing = KY_EASE_OUT))
-    var widthPx by remember { mutableStateOf(1f) }
-    val density = LocalDensity.current
+    var widthPx by remember { mutableStateOf(0f) }
     val latestLevel by rememberUpdatedState(level)
-    val shape = RoundedCornerShape(999.dp)
     val easing = com.tencent.kuikly.compose.animation.core.CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
-    LaunchedEffect(level) {
-        if (!dragging) position.animateTo(level.toFloat(), tween(360, easing = easing))
+    LaunchedEffect(level, request, dragging) {
+        if (!dragging) {
+            // Seed the settle from the last actual finger position, even if drag end was in the same frame.
+            val from = dragPosition
+            if (from != null) {
+                position.snapTo(from)
+                if (dragging || dragPosition != from) return@LaunchedEffect
+                dragPosition = null
+            }
+            position.animateTo(level.toFloat(), tween(360, easing = easing))
+        }
     }
     fun settle(target: Int) {
         Skin.updateFogLevel(target)
-        scope.launch { position.animateTo(target.toFloat(), tween(360, easing = easing)) }
+        request++ // A canceled drag or retap may target the already selected stop.
     }
-    Box(Modifier.fillMaxWidth().height(42.dp).clip(shape)
-        .glassMaterial(shape, control = true)
-        .onSizeChanged { widthPx = it.width.toFloat().coerceAtLeast(1f) }
+
+    val visiblePosition = dragPosition ?: position.value
+    val trackFill = Skin.def.surface.copy(alpha = if (Skin.dark) .52f else .42f)
+    val trackLine = Skin.def.ink.copy(alpha = if (Skin.dark) .15f else .11f)
+    val thumbFill = KY_ACCENT.copy(alpha = if (Skin.dark) .25f + press * .05f else .13f + press * .05f)
+    val thumbLine = KY_ACCENT.copy(alpha = if (Skin.dark) .40f else .25f)
+    val activeInk = if (Skin.dark) KY_INK else KY_ACCENT
+    Box(Modifier.fillMaxWidth().height(42.dp)
+        .onSizeChanged { widthPx = it.width.toFloat() }
         .pointerInput(Unit) {
             detectHorizontalDragGestures(
-                onDragStart = { dragging = true; pull = 0f },
+                onDragStart = {
+                    dragPosition = dragPosition ?: position.value
+                    dragging = true
+                },
                 onHorizontalDrag = { _, amount ->
-                    pull = (amount / 18f).coerceIn(-1f, 1f)
-                    val next = (position.value + amount / (widthPx / 3f)).coerceIn(0f, 2f)
-                    scope.launch { position.snapTo(next) }
+                    if (widthPx > 0f) {
+                        dragPosition = ((dragPosition ?: position.value) + amount / (widthPx / 3f)).coerceIn(0f, 2f)
+                    }
                 },
                 onDragEnd = {
                     dragging = false
-                    settle(kotlin.math.round(position.value).toInt().coerceIn(0, 2))
+                    settle(kotlin.math.round(dragPosition ?: position.value).toInt().coerceIn(0, 2))
                 },
                 onDragCancel = {
                     dragging = false
@@ -674,24 +769,37 @@ private fun FogLevelControl() {
             )
         },
     ) {
-        val cell = with(density) { (widthPx / 3f).toDp() }
-        Box(Modifier.offset(x = cell * position.value + 3.dp, y = 3.dp)
-            .width((cell - 6.dp).coerceAtLeast(0.dp)).height(36.dp)
-            .graphicsLayer {
-                scaleX = 1f + 0.055f * press + 0.065f * kotlin.math.abs(stretch)
-                scaleY = 1f - 0.07f * press - 0.025f * kotlin.math.abs(stretch)
-                rotationZ = stretch * 1.2f
+        Canvas(Modifier.fillMaxSize()) {
+            if (size.width <= 0f || size.height <= 0f) return@Canvas
+            val keyline = .85.dp.toPx()
+            fun pill(x: Float, y: Float, w: Float, h: Float, fill: Color, line: Color) {
+                if (w <= 0f || h <= 0f) return
+                val radius = minOf(w, h) * .5f
+                drawRoundRect(fill, Offset(x, y), Size(w, h), CornerRadius(radius))
+                val stroke = minOf(keyline, radius * .5f)
+                val half = stroke * .5f
+                drawRoundRect(
+                    line, Offset(x + half, y + half), Size(w - stroke, h - stroke),
+                    CornerRadius(radius - half), style = Stroke(stroke),
+                )
             }
-            .clip(shape).glassMaterial(shape, control = true, pressed = press)
-            .background(KY_ACCENT.copy(alpha = 0.12f + 0.04f * press)))
+            pill(0f, 0f, size.width, size.height, trackFill, trackLine)
+            val cell = size.width / 3f
+            val inset = minOf(3.5.dp.toPx(), cell * .25f, size.height * .25f)
+            val thumbWidth = (cell - 2f * inset) * (1f - .025f * press)
+            val thumbHeight = (size.height - 2f * inset) * (1f - .06f * press)
+            val center = cell * (visiblePosition.coerceIn(0f, 2f) + .5f)
+            val left = (center - thumbWidth * .5f).coerceIn(inset, size.width - inset - thumbWidth)
+            pill(left, (size.height - thumbHeight) * .5f, thumbWidth, thumbHeight, thumbFill, thumbLine)
+        }
         Row(Modifier.fillMaxSize()) {
             listOf("静态雾景", "轻柔流动", "实时流雾").forEachIndexed { index, title ->
-                Box(Modifier.weight(1f).height(42.dp).clip(shape)
+                Box(Modifier.weight(1f).height(42.dp)
                     .clickable { settle(index) }, contentAlignment = Alignment.Center) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text_(title, fontSize = 12f, lineHeight = 20f,
                             weight = if (level == index) 600 else 400,
-                            color = if (level == index) KY_ACCENT else KY_DIM2)
+                            color = if (level == index) activeInk else KY_DIM2)
                     }
                 }
             }

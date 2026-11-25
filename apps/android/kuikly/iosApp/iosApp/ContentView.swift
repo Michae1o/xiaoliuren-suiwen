@@ -33,9 +33,8 @@ struct ContentView: View {
     @StateObject private var shift = PageShiftModel()
     /* 原生卡只在「壹页 + 没有整屏遮罩」时露出来（Kotlin 那边 xlrAskVis 推过来） */
     @State private var askShown = false
-    /* 点详情那一刻的键盘位移快照：详情一开，卡片底边只走一次（从键盘上方落回 71），
-       而且和卡片长高同一条 0.26s 曲线 ⇒ 「详情把键盘顶下去」。
-       不做这个快照的话，键盘收起是系统另一条动画，看起来就是先合再开。 */
+    /* 详情展开时临时借用旧键盘的位移，让卡片长高和回落同时起步。
+       只在这次切换有效：下一条键盘开/关通知必须消费它，不能抵消详情内重新唤起的键盘。 */
     @State private var kbSnap: CGFloat = 0
 
     private var askLift: CGFloat {
@@ -64,6 +63,32 @@ struct ContentView: View {
     @State private var sheetDanger: Int = -1
     @State private var sheetShown = false
 
+    @Environment(\.scenePhase) private var recallScenePhase
+    @State private var recallReport: RecallReport?
+    @State private var recallExit: RecallExit?
+    private enum RecallExit: Equatable { case native, bridgeAlreadyClosed }
+    @State private var recallReminder: RecallReminderNotice?
+    @State private var recallAskHeight: CGFloat = 0
+
+    private var recallReminderBlocked: Bool {
+        recallScenePhase != .active || !askShown || !ask.ready || ask.moreOpen || kbShift > 0 ||
+            imeAllowed || drawer.open || drawer.prog > 0.001 ||
+            pickerCenter.show || sheetShown || recallReport != nil
+    }
+
+    private func requestRecallClose(_ id: UUID) {
+        guard recallReport?.id == id, recallExit == nil else { return }
+        recallExit = .native
+    }
+
+    private func finishRecallClose(_ id: UUID) {
+        guard recallReport?.id == id, let exit = recallExit else { return }
+        // Keep the report mounted and home/About inert through the full visual exit.
+        recallReport = nil
+        recallExit = nil
+        if exit == .native { NativeRecallBridge.send("close") }
+    }
+
     private func postSheetPick(_ idx: Int) {
         NotificationCenter.default.post(
             name: Notification.Name("xlrActionSheetPick"),
@@ -73,6 +98,84 @@ struct ContentView: View {
     }
 
     var body: some View {
+        ZStack(alignment: .top) {
+            mainSurface
+                .allowsHitTesting(recallReport == nil)
+                .accessibilityHidden(recallReport != nil)
+
+            if recallReport == nil, let item = recallReminder, !recallReminderBlocked, recallScenePhase == .active {
+                GeometryReader { geo in
+                    // 96pt clears the 86pt native toolbar. Only use this real vacant space;
+                    // the measured ask stack includes greeting, growing draft and any error.
+                    if recallAskHeight > 0 && geo.size.height - 71 - recallAskHeight >= 150 {
+                        NativeRecallReminder(item: item,
+                            acknowledge: { NativeRecallBridge.send("reminderShown", key: item.id) },
+                            open: { NativeRecallBridge.send("openReminder", key: item.id) },
+                            dismiss: { NativeRecallBridge.send("dismissReminder", key: item.id) })
+                            .id(item.id)
+                            .padding(.horizontal, 22)
+                            .padding(.top, 96)
+                    }
+                }
+                .ignoresSafeArea()
+                .zIndex(1)
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            if let report = recallReport {
+                // Take the already-laid-out root's viewport as the proposal. The report must
+                // never size the root (or replace the About/Kuikly subtree underneath).
+                NativeRecallPresentation(
+                    report: report,
+                    exiting: recallExit != nil,
+                    onClose: { requestRecallClose(report.id) },
+                    onExitFinished: { finishRecallClose(report.id) }
+                )
+                    .id(report.id)
+                    .transition(.identity)
+            }
+        }
+        .preferredColorScheme(recallReport != nil || isDarkTheme ? .dark : .light)
+        .onReceive(NotificationCenter.default.publisher(for: NativeRecallBridge.receive)) { note in
+            guard let update = RecallEnvelope(note) else { return }
+            switch update.kind {
+            case .open:
+                if let report = RecallReport(update) {
+                    recallReminder = nil
+                    recallExit = nil
+                    recallReport = report
+                }
+            case .close:
+                // A bridge/system back should use the same exit without echoing the command.
+                if recallReport != nil { recallExit = .bridgeAlreadyClosed }
+            case .reminder:
+                recallReminder = RecallReminderNotice(update)
+            case .clearReminder:
+                // Kotlin can clear the single home reminder independently of a currently open report.
+                if update.key == nil || update.key == recallReminder?.id { recallReminder = nil }
+            }
+        }
+        .onAppear {
+            NativeRecallBridge.send("visibility", active: recallReminderBlocked)
+            NativeRecallBridge.send("foreground", active: recallScenePhase == .active)
+            NativeRecallBridge.send("ready")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("xlrAskHeight"))) { note in
+            if let height = note.userInfo?["h"] as? NSNumber {
+                recallAskHeight = CGFloat(height.doubleValue)
+            }
+        }
+        .onChange(of: recallScenePhase) { phase in
+            // Control Center/temporary inactivity is not a fresh foreground visit.
+            if phase == .active { NativeRecallBridge.send("foreground", active: true) }
+            if phase == .background { NativeRecallBridge.send("foreground", active: false) }
+        }
+        .onChange(of: recallReminderBlocked) { blocked in
+            NativeRecallBridge.send("visibility", active: blocked)
+        }
+    }
+
+    private var mainSurface: some View {
         ZStack(alignment: .top) {
             KuiklyRenderViewPage(
                 pageName: "Yi",
@@ -123,6 +226,10 @@ struct ContentView: View {
                    起手慢、看着比键盘「慢半拍」。 */
                 withAnimation(.timingCurve(0.25, 0.1, 0.25, 1,
                                            duration: min(max(0.12, kbDur), 0.22))) {
+                    // xlrIme only posts on keyboard willShow/willHide. Clear the old
+                    // expansion snapshot in the same transaction, even if the new
+                    // show arrives before the expected hide (rapid focus switch).
+                    kbSnap = 0
                     kbShift = max(0, CGFloat(h) - 59)
                 }
                 xlrLastShift = kbShift
@@ -138,7 +245,6 @@ struct ContentView: View {
                     xlrEndEditing()
                 }
             }
-            .preferredColorScheme(isDarkTheme ? .dark : .light)
             /* 记录行菜单：系统 action sheet。Kotlin 侧推 `xlrActionSheet`（items + 哪个是红字），
                选完回 `xlrActionSheetPick`（idx，取消给 -1）。 */
             .confirmationDialog("", isPresented: $sheetShown, titleVisibility: .hidden) {

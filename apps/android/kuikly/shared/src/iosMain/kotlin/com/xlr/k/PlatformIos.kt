@@ -1,6 +1,7 @@
 package com.xlr.k
 
 import com.xlr.k.pages.Platform
+import com.xlr.k.pages.IosRecall
 import com.xlr.k.pages.StreamSnap
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.darwin.Darwin
@@ -55,6 +56,7 @@ object PlatformIos {
 
     fun install() {
         installCore()
+        IosRecall.install()
         installNet()
         installFiles()
         installMisc()
@@ -95,7 +97,7 @@ object PlatformIos {
         val info = NSBundle.mainBundle.infoDictionary
         Platform.version = (info?.get("CFBundleShortVersionString") as? String) ?: "1.0"
         Platform.versionCode = (info?.get("CFBundleVersion") as? String)?.toIntOrNull() ?: 1
-        Platform.pkgName = (info?.get("CFBundleIdentifier") as? String) ?: "cn.luoshen.xiaoliuren.ios"
+        Platform.pkgName = (info?.get("CFBundleIdentifier") as? String) ?: "cn.guatai.xiaoliuren.ios"
 
         /* 共享层拿这两个值把「设计坐标」换算成物理像素（手势/布局要用），
            和安卓那边给的口径一致：物理像素，不是点。

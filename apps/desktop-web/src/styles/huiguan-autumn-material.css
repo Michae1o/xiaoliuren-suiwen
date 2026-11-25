@@ -1,0 +1,26 @@
+.hg-dialog .hg-autumn-photo-backdrop{position:absolute;inset:0;overflow:hidden;z-index:-1;pointer-events:none;user-select:none}
+.hg-dialog .hg-autumn-photo-photo{position:absolute;display:block;height:auto;overflow:hidden;pointer-events:none}
+.hg-dialog .hg-autumn-photo-flight{position:absolute;left:81%;top:12%;width:clamp(79px,13vw,234px);perspective:480px}
+.hg-dialog .hg-autumn-photo-turning-leaf-main{left:0;top:0;width:100%;transform-origin:52% 49%;backface-visibility:visible}
+
+
+
+
+.hg-dialog .hg-autumn-photo-grass-dew-main,.hg-dialog .hg-autumn-photo-grass-dew-light{
+ right:-7%;bottom:18%;width:clamp(215px,38%,680px);
+}
+.hg-dialog .hg-autumn-photo-grass-dew-main{
+ mask-image:radial-gradient(ellipse 91% 88% at 61% 47%,#000 39%,#000e 69%,#0007 86%,transparent 100%);
+}
+.hg-dialog .hg-autumn-photo-grass-dew-light{
+ filter:brightness(1.21) saturate(.65);
+ mask-image:radial-gradient(ellipse 25% 58% at var(--hg-autumn-photo-glint,82%) 38%,#000 8%,#000b 46%,transparent 100%),
+            radial-gradient(ellipse 91% 88% at 61% 47%,#000 39%,#000e 69%,#0007 86%,transparent 100%);
+ mask-composite:intersect;
+}
+@media(max-width:690px),(max-aspect-ratio:1/1) {
+ .hg-dialog .hg-autumn-photo-flight{left:84%;top:11.5%;width:clamp(55px,19vw,126px);perspective:300px}
+ 
+ 
+ .hg-dialog .hg-autumn-photo-grass-dew-main,.hg-dialog .hg-autumn-photo-grass-dew-light{width:clamp(168px,57%,354px);right:-9%;bottom:19%}
+}

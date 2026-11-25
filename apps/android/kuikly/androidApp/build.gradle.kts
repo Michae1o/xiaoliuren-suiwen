@@ -9,6 +9,8 @@ plugins {
 /* 签名：在 apps/android/ 放一份 keystore.properties（格式见 keystore.properties.example）；
    没有这份文件就用调试签名，照样能编出安装包。 */
 val ksProps = Properties()
+/* ⚠ 候选路径要**逐个**包 runCatching：macOS/Linux 上 file("<盘符>/…") 会抛
+   InvalidUserDataException（Cannot convert URL ... to a file），在配置阶段就把构建打死。 */
 val ksPath = file("../../keystore.properties")   /* 自己放一份；没有就用调试签名 */
 if (ksPath.exists()) FileInputStream(ksPath).use { ksProps.load(it) }
 
@@ -21,8 +23,8 @@ android {
         applicationId = "cn.guatai.xiaoliuren"
         minSdk = 24
         targetSdk = 34
-        versionCode = 12611131
-        versionName = "2.261113.1"
+        versionCode = 12611252
+        versionName = "2.261125.2"
     }
 
     buildFeatures {

@@ -1,5 +1,8 @@
 package com.xlr.k.pages
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.xlr.k.judge.Rec
 import com.xlr.k.judge.dumpRows
 import com.xlr.k.judge.parseRows
@@ -14,6 +17,12 @@ import kotlinx.datetime.toLocalDateTime
 internal object RecStore {
     private const val KEY = "xlr-cases"
 
+    /** 已落地的修改版本：抽屉已打开时也要重读，而不只等到下次开合。 */
+    var caseRevision by mutableStateOf(0)
+        private set
+    var ruleRevision by mutableStateOf(0)
+        private set
+
     private fun stamp(): String {
         val d = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
         fun p(x: Int) = if (x < 10) "0$x" else "$x"
@@ -26,7 +35,9 @@ internal object RecStore {
     fun load(): List<Rec> = loadRaw().filter { (it["deleted"] ?: "").isEmpty() }
 
     fun save(a: List<Rec>) {
-        Platform.put?.invoke(KEY, dumpRows(a))
+        val write = Platform.put ?: return
+        write(KEY, dumpRows(a))
+        caseRevision++
     }
 
     /** 起一卦就记一条（同一卦不重复记：调用方传已有 id 就跳过） */
@@ -57,15 +68,16 @@ internal object RecStore {
         return id
     }
 
+    /** 速断只填空项；模型可升级速断，但新请求失败或空白时不得清掉已存断辞。 */
     fun updateDuanci(id: String, text: String, model: Boolean) {
-        if (id.isEmpty()) return
+        if (id.isBlank() || text.isBlank()) return
         val a = loadRaw()
-        for (r in a) if (r["id"] == id) {
-            r["duanci"] = text
-            if (model) r["ans"] = "model"
-            save(a)
-            return
-        }
+        val r = a.firstOrNull { it["id"] == id && it["deleted"].isNullOrEmpty() } ?: return
+        if (!model && (r["duanci"].orEmpty().isNotBlank() || r["ans"] == "model")) return
+        if (r["duanci"] == text && (!model || r["ans"] == "model")) return
+        r["duanci"] = text
+        if (model) r["ans"] = "model"
+        save(a)
     }
 
     /** 应验标记：再点一次取消（早期版本 setFb 的取反语义） */
@@ -116,7 +128,7 @@ internal object RecStore {
 
     /** 全部重置用：卦例本**真删干净**（不进回收站）——早期版本那句 removeItem('xlr-cases') */
     fun wipeCases() {
-        Platform.put?.invoke(KEY, "[]")
+        save(emptyList())
     }
 
     /* ---------- 复盘结果（写在同一条记录上，字段名照早期版本 rv/rvWhy/rvRule） ---------- */
@@ -138,7 +150,9 @@ internal object RecStore {
     fun loadRules(): MutableList<Rec> = parseRows(Platform.get?.invoke(RKEY))
 
     fun saveRules(a: List<Rec>) {
-        Platform.put?.invoke(RKEY, dumpRows(a))
+        val write = Platform.put ?: return
+        write(RKEY, dumpRows(a))
+        ruleRevision++
     }
 
     fun addRule(from: Rec, rule: String, why: String): Int {

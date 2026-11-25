@@ -1,0 +1,76 @@
+.hg-dialog .hg-sun-photo-backdrop{position:absolute;inset:0;overflow:hidden;z-index:-1;pointer-events:none;user-select:none}
+.hg-dialog .hg-sun-photo-photo{position:absolute;display:block;overflow:hidden;height:auto;pointer-events:none}
+.hg-dialog .hg-sun-photo-equinox-dusk,
+.hg-dialog .hg-sun-photo-dusk-warm,
+.hg-dialog .hg-sun-photo-dusk-cool,
+.hg-dialog .hg-sun-photo-dusk-warm-mist,
+.hg-dialog .hg-sun-photo-dusk-cool-mist { position:absolute; inset:0; }
+.hg-dialog[data-hg-material-term=equinox-dusk],
+.hg-dialog .hg-sun-photo-equinox-dusk {
+ background:#101b2a;
+}
+.hg-dialog .hg-sun-photo-dusk-warm {
+ background:radial-gradient(ellipse 65% 55% at 22% 69%,
+  rgb(194 130 83) 0%,rgb(194 130 83 / .90) 18%,rgb(194 130 83 / .59) 46%,
+  rgb(194 130 83 / .22) 74%,rgb(194 130 83 / 0) 100%);
+}
+.hg-dialog .hg-sun-photo-dusk-cool {
+ background:radial-gradient(ellipse 65% 55% at 76% 27%,
+  rgb(113 152 183) 0%,rgb(113 152 183 / .90) 18%,rgb(113 152 183 / .59) 46%,
+  rgb(113 152 183 / .22) 74%,rgb(113 152 183 / 0) 100%);
+}
+.hg-dialog .hg-sun-photo-dusk-warm-mist {
+ background:radial-gradient(ellipse 32% 32% at 22% 70%,
+  rgb(231 173 119) 0%,rgb(231 173 119 / .90) 18%,rgb(231 173 119 / .59) 46%,
+  rgb(231 173 119 / .22) 74%,rgb(231 173 119 / 0) 100%);
+}
+.hg-dialog .hg-sun-photo-dusk-cool-mist {
+ background:radial-gradient(ellipse 30% 29% at 77% 27%,
+  rgb(169 201 216) 0%,rgb(169 201 216 / .90) 18%,rgb(169 201 216 / .59) 46%,
+  rgb(169 201 216 / .22) 74%,rgb(169 201 216 / 0) 100%);
+}
+.hg-dialog[data-hg-material-term=equinox-dusk] {
+ --hg-light-ink:#f8f4ec;
+ --hg-night-ink:#f4f6f3;
+}
+.hg-dialog[data-hg-material-term=equinox-dusk] .hg-range button[aria-pressed=false] {
+ opacity:.80;
+}
+.hg-dialog[data-hg-material-term=equinox-dusk] .hg-period-label {
+ color:var(--hg-layout-ink);
+ border-color:currentColor;
+}
+.hg-dialog[data-hg-material-term=equinox-dusk] .hg-sky-stage {
+ --hg-atlas-day:#abbcca;
+ --hg-atlas-night:#b3c9d9;
+ --hg-atlas-dipper:#dec59b;
+ --hg-case-day:#9cbcd2;
+ --hg-case-gold:#e7bb93;
+ --hg-dipper-aura:#a5afb6;
+ --hg-dipper-bloom:#e3c6a1;
+}
+.hg-dialog .hg-sun-photo-solstice-light{
+ position:absolute;inset:0;
+ background:radial-gradient(ellipse var(--hg-sun-light-reach,104%) 90% at 13% 93%,#fff5bf 0%,#f6cf8e 19%,#e9ae7035 55%,transparent 78%);
+}
+.hg-dialog .hg-sun-photo-solstice-horizon{position:absolute;inset:0;
+ background:radial-gradient(ellipse var(--hg-sun-light-reach,104%) 19% at 19% 87%,#ffe2a9a6 1%,#f4bd7450 53%,transparent 89%);}
+.hg-dialog .hg-sun-photo-lotus-cool-main{width:clamp(208px,29%,415px);right:-1%;bottom:13%;transform-origin:82% 91%;
+ mask-image:radial-gradient(ellipse 93% 95% at 65% 48%,#000 32%,#000f 63%,#0009 85%,transparent 100%),
+ linear-gradient(to bottom,#000 0%,#000 75%,transparent 100%);
+ mask-composite:intersect;}
+.hg-dialog .hg-sun-photo-heat-haze-ground,.hg-dialog .hg-sun-photo-heat-haze-air{width:clamp(388px,81%,1610px);right:-5%;bottom:13%}
+.hg-dialog .hg-sun-photo-heat-haze-ground{
+ mask-image:radial-gradient(ellipse 86% 81% at 67% 64%,#000 16%,#000e 62%,#0008 78%,transparent 100%);}
+.hg-dialog .hg-sun-photo-heat-haze-air{
+ transform-origin:80% 61%;filter:blur(.75px) brightness(1.08) saturate(.76);
+ mask-image:linear-gradient(to bottom,transparent 2%,#000 25%,#000 48%,transparent 75%),
+ radial-gradient(ellipse 79% 62% at 57% 39%,#000 15%,#000e 51%,#0005 76%,transparent 100%);
+ mask-composite:intersect}
+.hg-dialog .hg-sun-photo-first-ice-main{width:clamp(340px,72%,1350px);left:-5%;bottom:15%;
+ mask-image:radial-gradient(ellipse var(--hg-sun-ice-reach,96%) 81% at 10% 67%,#000 15%,#000d 52%,#0008 77%,transparent 100%);}
+@media(max-width:690px),(max-aspect-ratio:1/1){
+ .hg-dialog .hg-sun-photo-lotus-cool-main{width:clamp(160px,44%,335px);right:-4%;bottom:18%}
+ .hg-dialog .hg-sun-photo-heat-haze-ground,.hg-dialog .hg-sun-photo-heat-haze-air{width:clamp(320px,112%,694px);right:-12%;bottom:20%}
+ .hg-dialog .hg-sun-photo-first-ice-main{width:clamp(290px,89%,628px);left:-9%;bottom:14%}
+}

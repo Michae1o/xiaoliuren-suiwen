@@ -13,7 +13,7 @@
  *   updateCaseDuanci/markModelAnswered → recordsStore.js
  * ⛔ 别再退回 window.xxx；也别在这里再抄一份 `plainAll`（那是 R4 要防的「判据副本」）。
  */
-import { plainAll, SYS, buildBlocks as pkgBuildBlocks } from '@xlr/shared-judgment';
+import { plainAll, SYS, zhi, buildBlocks as pkgBuildBlocks, followupUser as pkgFollowupUser } from '@xlr/shared-judgment';
 /* ★ 「问着…」不要文字，换成**开屏那款液态太极**（含从按钮到太极的过渡）。
    markup 当时直接 import 复用开屏那一份（`splashMarkup.js`，零复制）。
    ⇒ 桌面端也换成**手机端同款位图徽章**（`askTaijiImg.js`，两端各存一份逐字节相同的 PNG ——
@@ -38,7 +38,7 @@ var updateCaseDuanci = RecordsStore.updateCaseDuanci, markModelAnswered = Record
    **三参纯函数** `plainAll(c, B, hooks)`，其中：
      · `B` 要的是「块」形状 `{n, t, items:[{lb,tx}]}`（第 23–29 行按 `b.items.forEach` 读）
      · `hooks` 取 `ruleBlock()` / `reviewBlock()`（第 30–37 行，**可省**但不是可有可无：准则那一块
-       权重高于一般判据，漏了模型就看不到用户已确认的准则）
+       排在一般判据前面，漏了模型就看不到用户已确认的准则）
    ⇒ 这里按包内签名喂上：`B` 用 `window.__blocks`，形状不对就现搭（`buildBlocks`）；钩子走 `ReviewCore`。
    ⛔ 别再往这里塞第二份 plainAll 实现（那是 R4 要防的「判据副本」，实测会被链拦下）。 */
 function plainAllOf() {
@@ -190,38 +190,19 @@ function plainCore(c, B) {
   try { return plainAllOf(); } finally { window.__ctx = oc; window.__blocks = ob; }   /* ★ 声明差异 ④（2026-10-15 修）：早期版本这里是**零参** `plainAll()`（早期实现的全局版，从 window 读卦）；本仓 `plainAll` 是包内**三参纯函数** `plainAll(c,B,hooks)` —— 照旧搬会传进 undefined、它去读 `c.q` 就抛「Cannot read properties of undefined (reading 'q')」。⇒ 走本模块已有的三参适配器 `plainAllOf()`（它读 window.__ctx/__blocks，并在形状不对时现搭 buildBlocks）。 */
 }
 
-/* L339–360 逐字（规格 v2 原记录 补两处：判据整段放最前、当时的断辞别漏 —— 断辞取本次解卦落下的 window.__md） */
+/* L339–360 逐字（规格 v2 §5 补两处：判据整段放最前、当时的断辞别漏 —— 断辞取本次解卦落下的 window.__md） */
 function followupUser(c, B, thread, q) {
-  var L = ['请接着这一卦继续答（接前卦：同一卦内追问，不另起卦）。', ''];
-  /* 判据整段放最前（规格 v2 原记录）：先给材料，再给上下文 */
-  L.push('【这一卦的判据 · 与解卦时同一份】');
-  L.push(plainCore(c, B));
-  L.push('');
-  /* 当时的断辞：不给它，等于让它脱开自己上次说的话重新猜（之前只有这里漏过） */
-  var du = (typeof window !== 'undefined' && window.__md) || '';
-  if (du) {
-    L.push('【当时的断辞】');
-    L.push(String(du).replace(/<[^>]+>/g, ''));
-    L.push('');
-  }
-  L.push('【这一卦已经答过的】');
-  if (!thread || !thread.length) L.push('（这是第一次追问）');
-  (thread || []).forEach(function (it, i) {
-    L.push('问' + (i + 1) + '：' + it.q);
-    L.push('答' + (i + 1) + '：' + String(it.a || '').replace(/<[^>]+>/g, ''));
+  /* ★ 内容只有一份：包内 followup.js（桌面/安卓/iOS/小程序共用）。这里只负责喂料与清洗。 */
+  var th = (thread || []).map(function (it) {
+    return { q: it.q, a: String(it.a || '').replace(/<[^>]+>/g, '') };
   });
-  L.push('');
-  L.push('【这次要问的】');
-  L.push(q);
-  L.push('');
-  L.push('【续问规矩】');
-  L.push('① 只用这一卦：不另起、不重起，答案要从这一卦里得出；');
-  L.push('② 落宫为主：先看这一问在这卦里对应到哪座宫、什么关系，再答（问什么，是什么）；');
-  L.push('③ 每处判断括注依据（哪宫／哪关系／哪条判据）；');
-  L.push('④ 这一问若不在这一卦里（问的是旁人别的事、或无端之问），直接说「这不在这一卦里」并讲清原因，不要硬答；');
-  L.push('⑤ 不要主动再问、不要邀着继续问、不展开没问到的东西；');
-  L.push('⑥ 格式同主断辞（【结论】【断辞】…），宁短勿长、够用即止。');
-  return L.join('\n');
+  var du = (typeof window !== 'undefined' && window.__md) || '';
+  return pkgFollowupUser({
+    judgeText: plainCore(c, B),
+    duanci: String(du).replace(/<[^>]+>/g, ''),
+    thread: th,
+    q: q
+  });
 }
 
 /* L362–387 逐字 */

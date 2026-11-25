@@ -526,7 +526,7 @@ private fun EvidenceCard(blocks: List<Block>, onHeaderH: (Int) -> Unit) {
             Text_(text = "断卦依据", fontSize = 14f, lineHeight = 26f, weight = 500)
             Spacer(modifier = Modifier.width(13.dp))
             Text_(
-                text = blocks.size.toString() + " 组 · 每条带出处",
+                text = blocks.count { it.n != "I" }.toString() + " 组",
                 fontSize = 11.5f,
                 lineHeight = 24f,
                 color = KY_DIM2,
@@ -553,7 +553,7 @@ private fun EvidenceCard(blocks: List<Block>, onHeaderH: (Int) -> Unit) {
                     .fillMaxWidth()
                     .padding(start = 10.dp, end = 10.dp, bottom = 6.dp)
             ) {
-                blocks.forEach { b -> EvGroup(b) }
+                blocks.filter { it.n != "I" }.forEach { b -> EvGroup(b) }
             }
         }
         }
@@ -648,15 +648,6 @@ private fun EvGroup(b: com.xlr.k.judge.Block) {
                                 lineHeight = 18f,
                                 color = KY_DIM,
                             )
-                            if (it.src.isNotEmpty()) {
-                                Text_(
-                                    text = "出处：" + it.src,
-                                    fontSize = 10f,
-                                    lineHeight = 16f,
-                                    color = KY_DIM2,
-                                    modifier = Modifier.padding(top = 2.dp),
-                                )
-                            }
                         }
                     }
                 }

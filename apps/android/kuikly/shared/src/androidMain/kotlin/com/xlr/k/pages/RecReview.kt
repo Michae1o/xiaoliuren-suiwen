@@ -1,6 +1,17 @@
 package com.xlr.k.pages
 
 import com.xlr.k.judge.Rec
+import com.xlr.k.judge.FOLLOW_A_PRE
+import com.xlr.k.judge.FOLLOW_COLON
+import com.xlr.k.judge.FOLLOW_HEAD
+import com.xlr.k.judge.FOLLOW_L_ASK
+import com.xlr.k.judge.FOLLOW_L_ASKED
+import com.xlr.k.judge.FOLLOW_L_DUANCI
+import com.xlr.k.judge.FOLLOW_L_FIRST
+import com.xlr.k.judge.FOLLOW_L_JUDGE
+import com.xlr.k.judge.FOLLOW_L_RULES
+import com.xlr.k.judge.FOLLOW_Q_PRE
+import com.xlr.k.judge.FOLLOW_RULES
 
 /* 记录页的「复盘 / 准则 / 接着问」——对应早期版本
    apps/mobile-web/src/review/reviewCore.js（reviewCase / ruleBlock / reviewBlock / confirmRule）
@@ -141,29 +152,24 @@ internal fun rvFmtPlain(t: String): String {
 
 internal fun followUpUser(rec: Rec, q: String): String {
     val sb = StringBuilder()
-    sb.append("请接着这一卦继续答（接前卦：同一卦内追问，不另起卦）。\n\n")
+    sb.append(FOLLOW_HEAD).append("\n\n")
     /* 判据放最前（规格 v2 §5）：先给材料，再给上下文 */
     val jtUp = judgeTextOf(rec)
-    if (jtUp.isNotEmpty()) sb.append("【这一卦的判据 · 与解卦时同一份】\n").append(jtUp).append("\n\n")
+    if (jtUp.isNotEmpty()) sb.append(FOLLOW_L_JUDGE).append("\n").append(jtUp).append("\n\n")
     /* 所问/背景/卦/事类 已在判据整段开头（plainAll 自带），不重复 */
     val d = rec["duanci"] ?: ""
-    if (d.isNotEmpty()) sb.append("【当时的断辞】\n").append(d).append("\n")
+    if (d.isNotEmpty()) sb.append(FOLLOW_L_DUANCI).append("\n").append(d).append("\n")
     val th = threadOf(rec)
-    sb.append("\n【这一卦已经答过的】\n")
-    if (th.isEmpty()) sb.append("（这是第一次追问）\n")
+    sb.append("\n").append(FOLLOW_L_ASKED).append("\n")
+    if (th.isEmpty()) sb.append(FOLLOW_L_FIRST).append("\n")
     th.forEachIndexed { i, it ->
-        sb.append("问").append(i + 1).append("：").append(it.first).append("\n")
-        sb.append("答").append(i + 1).append("：").append(it.second).append("\n")
+        sb.append(FOLLOW_Q_PRE).append(i + 1).append(FOLLOW_COLON).append(it.first).append("\n")
+        sb.append(FOLLOW_A_PRE).append(i + 1).append(FOLLOW_COLON).append(it.second).append("\n")
     }
     sb.append("\n").append(ruleBlock())
-    sb.append("【这次要问的】\n").append(q).append("\n\n")
-    sb.append("【续问规矩】\n")
-    sb.append("① 只用这一卦：不另起、不重起，答案要从这一卦里得出；\n")
-    sb.append("② 落宫为主：先看这一问在这卦里对应到哪座宫、什么关系，再答（问什么，是什么）；\n")
-    sb.append("③ 每处判断括注依据（哪宫／哪关系／哪条判据）；\n")
-    sb.append("④ 这一问若不在这一卦里（问的是旁人别的事、或无端之问），直接说「这不在这一卦里」并讲清原因，不要硬答；\n")
-    sb.append("⑤ 不要主动再问、不要邀着继续问、不展开没问到的东西；\n")
-    sb.append("⑥ 格式同主断辞（【结论】【断辞】…），宁短勿长、够用即止。\n")
+    sb.append(FOLLOW_L_ASK).append("\n").append(q).append("\n\n")
+    sb.append(FOLLOW_L_RULES).append("\n")
+    FOLLOW_RULES.forEach { sb.append(it).append("\n") }
     return sb.toString()
 }
 

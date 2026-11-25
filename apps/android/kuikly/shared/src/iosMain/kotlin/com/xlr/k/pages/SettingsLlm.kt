@@ -7,6 +7,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import com.tencent.kuikly.compose.animation.AnimatedVisibility
+import com.tencent.kuikly.compose.animation.core.animateFloatAsState
+import com.tencent.kuikly.compose.animation.core.snap
+import com.tencent.kuikly.compose.animation.core.tween
+import com.tencent.kuikly.compose.animation.expandVertically
+import com.tencent.kuikly.compose.animation.fadeIn
+import com.tencent.kuikly.compose.animation.fadeOut
+import com.tencent.kuikly.compose.animation.shrinkVertically
+import com.tencent.kuikly.compose.foundation.Canvas
 import com.tencent.kuikly.compose.foundation.background
 import com.tencent.kuikly.compose.foundation.border
 import com.tencent.kuikly.compose.foundation.layout.Box
@@ -16,15 +25,34 @@ import com.tencent.kuikly.compose.foundation.layout.Spacer
 import com.tencent.kuikly.compose.foundation.layout.fillMaxSize
 import com.tencent.kuikly.compose.foundation.layout.fillMaxWidth
 import com.tencent.kuikly.compose.foundation.layout.height
+import com.tencent.kuikly.compose.foundation.layout.heightIn
 import com.tencent.kuikly.compose.foundation.layout.padding
+import com.tencent.kuikly.compose.foundation.layout.size
 import com.tencent.kuikly.compose.foundation.layout.width
 import com.tencent.kuikly.compose.foundation.lazy.LazyColumn
+import com.tencent.kuikly.compose.foundation.lazy.LazyListScope
 import com.tencent.kuikly.compose.foundation.shape.RoundedCornerShape
+import com.tencent.kuikly.compose.material3.Text
 import com.tencent.kuikly.compose.ui.Alignment
 import com.tencent.kuikly.compose.ui.Modifier
 import com.tencent.kuikly.compose.ui.draw.clip
+import com.tencent.kuikly.compose.ui.draw.clipToBounds
+import com.tencent.kuikly.compose.ui.geometry.Offset
 import com.tencent.kuikly.compose.ui.graphics.Color
+import com.tencent.kuikly.compose.ui.graphics.StrokeCap
+import com.tencent.kuikly.compose.ui.graphics.graphicsLayer
+import com.tencent.kuikly.compose.ui.text.font.FontWeight
+import com.tencent.kuikly.compose.ui.text.style.TextAlign
+import com.tencent.kuikly.compose.ui.text.style.TextOverflow
+import com.tencent.kuikly.compose.ui.semantics.Role
+import com.tencent.kuikly.compose.ui.semantics.onClick
+import com.tencent.kuikly.compose.ui.semantics.role
+import com.tencent.kuikly.compose.ui.semantics.semantics
+import com.tencent.kuikly.compose.ui.semantics.stateDescription
 import com.tencent.kuikly.compose.ui.unit.dp
+import com.tencent.kuikly.compose.ui.unit.sp
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /* 设置 · 大模型（旧 SettingsScreen.jsx 的 #s-llm，五步向导）
@@ -70,6 +98,15 @@ internal object LlmDraft {
         temp = temp.toDoubleOrNull() ?: 0.5,
         proxy = proxy.trim(),
     )
+}
+
+/** Navigation intent, not a model preference. Only the guide's explicit «去配置» sets it. */
+internal object LlmGuideHandoff {
+    var revealRequested by mutableStateOf(false)
+        private set
+
+    fun requestReveal() { revealRequested = true }
+    fun consumeReveal() { revealRequested = false }
 }
 
 @Composable
@@ -184,55 +221,48 @@ internal fun LlmPage() {
         }
     }
 
-    val configured = LlmStore.missing(cfgSnap).isEmpty() && cfgSnap.key.isNotEmpty()
+    val configured = LlmStore.missing(cfgSnap).isEmpty()
+    var editOpen by remember { mutableStateOf(false) }
+    val revealFromGuide = LlmGuideHandoff.revealRequested && Session.settingsOpen &&
+        Session.settingsTab == "llm" && !Session.guideOn
+    LaunchedEffect(revealFromGuide) {
+        if (revealFromGuide) {
+            editOpen = true
+            LlmGuideHandoff.consumeReveal()
+        }
+    }
+
+    val savedProvider = when {
+        !configured -> "填写服务商与模型"
+        else -> tiles.firstOrNull {
+            it.base.isNotBlank() && it.base.trimEnd('/') == cfgSnap.base.trimEnd('/')
+        }?.n ?: "自定义接口"
+    }
 
     LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
         item {
-            SetLead("解卦本身不联网：起卦、排盘、断卦依据都在本机算。配上模型，点「让模型解卦」直接出断辞。")
-
-            /* 顶部这张卡（「最顶上那个【还没配模型】的卡片，换成重新查看引导」）
-               ⇒ 整张卡就是「重新看配置引导」的入口，副标题保留一眼可见的状态（已配置/未配置）。
-               动作与底部那条早期版本入口一致：guideStep=0 + guideOn=true。 */
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (configured) veil(0.88f) else veil(0.5f))
-                    .border(Skin.borderW, if (configured) KY_ACCENT_LINE else veil(0.75f), RoundedCornerShape(12.dp))
-                    .tapNoIndication {
-                        Session.guideStep = 0
-                        Session.guideOn = true
-                    }
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            SetLead("起卦和排盘在本机完成；配置模型后可用「让模型解卦」。")
+            ModelConfigCard(
+                open = editOpen,
+                configured = configured,
+                model = if (configured) cfgSnap.model else "尚未选择模型",
+                provider = savedProvider,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text_(
-                        text = "重新看配置引导",
-                        fontSize = 13.5f,
-                        lineHeight = 21f,
-                        weight = 500,
-                    )
-                    Text_(
-                        text = if (configured) "已配置 · " + cfgSnap.model + "　·　再来一遍图文"
-                        else "八步图文，跟着走就行；不知道 Key 去哪拿，也在这",
-                        fontSize = 11f,
-                        lineHeight = 17f,
-                        color = KY_DIM2,
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text_(text = "›", fontSize = 18f, lineHeight = 20f, color = KY_DIM2)
+                if (editOpen) dismissIme()
+                editOpen = !editOpen
             }
-            Spacer(modifier = Modifier.height(18.dp))
-
-            /* ① 选服务商 —— 一格一家（旧 .provs 网格） */
-            SetSecTitle("1　选一个服务商")
+            Spacer(Modifier.height(9.dp))
+            SetBtn(if (configured) "重新看配置引导" else "查看配置引导", small = true, primary = !configured) {
+                Session.guideStep = 0
+                Session.guideOn = true
+            }
+            Spacer(Modifier.height(14.dp))
         }
+        modelConfigItem(editOpen) { SetSecTitle("1　选一个服务商") }
 
         /* 两列网格：预设 + 自定义，末尾跟一个「＋ 自定义」 */
         cells.chunked(2).forEach { pair ->
-            item {
+            modelConfigItem(editOpen) {
                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
                     pair.forEachIndexed { i, t ->
                         if (i > 0) Spacer(modifier = Modifier.width(10.dp))
@@ -287,7 +317,7 @@ internal fun LlmPage() {
         }
 
         if (adding) {
-            item {
+            modelConfigItem(editOpen) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -314,7 +344,7 @@ internal fun LlmPage() {
         }
 
 
-        item {
+        modelConfigItem(editOpen) {
             SetHint("选完会自动填好接口地址和模型名，你只要补一个 Key。")
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -519,6 +549,146 @@ internal fun LlmPage() {
             }
             /* 早期版本这里还有一条「重新看配置引导」，已并入顶部那张卡（同一个动作，别摆两处） */
             Spacer(modifier = Modifier.height(34.dp))
+        }
+        item {
+            if (!editOpen) {
+                val status = when {
+                    testing -> "正在测试连接…"
+                    pulling -> "正在拉取模型…"
+                    else -> msg
+                }
+                if (status.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text_(status, fontSize = 11.5f, lineHeight = 18f, color = KY_DIM2)
+                }
+            }
+        }
+    }
+}
+
+private const val ModelConfigEnterMs = 265
+private const val ModelConfigExitMs = 210
+
+/** The saved model summary is the disclosure control; the guide remains a separate action. */
+@Composable
+private fun ModelConfigCard(
+    open: Boolean,
+    configured: Boolean,
+    model: String,
+    provider: String,
+    onToggle: () -> Unit,
+) {
+    var touchDown by remember { mutableStateOf(false) }
+    var tapPulse by remember { mutableStateOf(false) }
+    var pulseJob by remember { mutableStateOf<Job?>(null) }
+    val scope = rememberCoroutineScope()
+    val pressed = touchDown || tapPulse
+    val pressProgress by animateFloatAsState(
+        if (pressed) 1f else 0f,
+        if (pressed) snap() else tween(155, easing = KY_EASE_OUT),
+    )
+    fun activate() {
+        // Even a touch shorter than one frame leaves a small visible pulse.
+        // A drag/cancel never reaches this path; the existing gesture releases touchDown.
+        pulseJob?.cancel()
+        tapPulse = true
+        pulseJob = scope.launch {
+            delay(80)
+            tapPulse = false
+        }
+        onToggle()
+    }
+    val angle by animateFloatAsState(
+        if (open) 90f else 0f,
+        if (open) tween(ModelConfigEnterMs, easing = KY_EASE_OUT) else tween(ModelConfigExitMs, easing = KY_EASE_IN),
+    )
+    // Mix against the actual settings background, once, into an opaque flat
+    // surface. Only this fill responds to a press; the hit box and type stay put.
+    val skin = Skin.def
+    val inkAmount = (if (skin.dark) .083f else .052f) + .048f * pressProgress
+    val fill = Color(
+        skin.bg.red + (skin.ink.red - skin.bg.red) * inkAmount,
+        skin.bg.green + (skin.ink.green - skin.bg.green) * inkAmount,
+        skin.bg.blue + (skin.ink.blue - skin.bg.blue) * inkAmount,
+        1f,
+    )
+    Box(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 74.dp)
+            .background(fill, RoundedCornerShape(12.dp))
+            .semantics(mergeDescendants = true) {
+                role = Role.Button
+                stateDescription = if (open) "已展开" else "已收起"
+                onClick(label = if (open) "收起模型配置" else "展开模型配置") { activate(); true }
+            }
+            .tapPressable(onPress = { touchDown = it }, onTap = { activate() }),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text_("模型配置", fontSize = 14f, lineHeight = 20f, weight = 600)
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(6.dp).clip(RoundedCornerShape(3.dp))
+                        .background(if (configured) KY_OK else KY_DIM2))
+                    Spacer(Modifier.width(6.dp))
+                    Text_(if (configured) "已配置" else "尚未配置", fontSize = 11f, lineHeight = 17f, color = KY_DIM)
+                }
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1.25f), horizontalAlignment = Alignment.End) {
+                ModelConfigValue(model, fontSize = 13f, lineHeight = 20f, color = KY_INK, weight = 600)
+                Spacer(Modifier.height(4.dp))
+                ModelConfigValue(provider, fontSize = 11f, lineHeight = 17f, color = KY_DIM, weight = 400)
+            }
+            Spacer(Modifier.width(10.dp))
+            Canvas(Modifier.size(16.dp).graphicsLayer { rotationZ = angle }) {
+                val x = size.width / 2f
+                val y = size.height / 2f
+                val dx = size.width * .14f
+                val dy = size.height * .29f
+                val tip = Offset(x + dx, y)
+                val stroke = size.width * .084f
+                drawLine(KY_DIM, Offset(x - dx, y - dy), tip, strokeWidth = stroke, cap = StrokeCap.Round)
+                drawLine(KY_DIM, tip, Offset(x - dx, y + dy), strokeWidth = stroke, cap = StrokeCap.Round)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModelConfigValue(text: String, fontSize: Float, lineHeight: Float, color: Color, weight: Int) {
+    // The non-weighted, fixed chevron reserves its own width; content ends in
+    // a native ellipsis inside the already bounded value column.
+    Text(
+        text = text,
+        modifier = Modifier.fillMaxWidth(),
+        fontSize = fontSize.sp,
+        lineHeight = lineHeight.sp,
+        fontWeight = FontWeight(weight),
+        letterSpacing = 0f.sp,
+        color = color,
+        textAlign = TextAlign.End,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+/** Keep the provider grid lazy; each visible section reveals from the top and clips during motion. */
+private fun LazyListScope.modelConfigItem(open: Boolean, content: @Composable () -> Unit) {
+    item {
+        Box(Modifier.fillMaxWidth().clipToBounds()) {
+            AnimatedVisibility(
+                visible = open,
+                enter = expandVertically(animationSpec = tween(ModelConfigEnterMs, easing = KY_EASE_OUT), expandFrom = Alignment.Top)
+                    + fadeIn(animationSpec = tween(180)),
+                exit = shrinkVertically(animationSpec = tween(ModelConfigExitMs, easing = KY_EASE_IN), shrinkTowards = Alignment.Top)
+                    + fadeOut(animationSpec = tween(155)),
+            ) {
+                Column(Modifier.fillMaxWidth()) { content() }
+            }
         }
     }
 }

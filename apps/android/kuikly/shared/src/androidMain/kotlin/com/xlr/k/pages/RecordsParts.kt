@@ -1,18 +1,27 @@
 package com.xlr.k.pages
 
+import android.animation.ValueAnimator
+import android.os.Build
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import com.tencent.kuikly.compose.animation.core.Animatable
+import com.tencent.kuikly.compose.animation.core.animateFloatAsState
 import com.tencent.kuikly.compose.animation.core.tween
 import com.tencent.kuikly.compose.foundation.Canvas
 import com.tencent.kuikly.compose.foundation.background
 import com.tencent.kuikly.compose.foundation.border
+import com.tencent.kuikly.compose.foundation.gestures.awaitEachGesture
+import com.tencent.kuikly.compose.foundation.gestures.awaitFirstDown
+import com.tencent.kuikly.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
 import com.tencent.kuikly.compose.foundation.gestures.detectHorizontalDragGestures
+import com.tencent.kuikly.compose.foundation.gestures.horizontalDrag
+import com.tencent.kuikly.compose.foundation.gestures.detectTapGestures
 import com.tencent.kuikly.compose.foundation.layout.Box
 import com.tencent.kuikly.compose.foundation.layout.Column
 import com.tencent.kuikly.compose.foundation.layout.Row
@@ -25,6 +34,7 @@ import com.tencent.kuikly.compose.foundation.layout.offset
 import com.tencent.kuikly.compose.foundation.layout.padding
 import com.tencent.kuikly.compose.foundation.layout.width
 import com.tencent.kuikly.compose.foundation.lazy.LazyColumn
+import com.tencent.kuikly.compose.foundation.lazy.rememberLazyListState
 import com.tencent.kuikly.compose.foundation.shape.RoundedCornerShape
 import com.tencent.kuikly.compose.foundation.shape.CircleShape
 import com.tencent.kuikly.compose.foundation.layout.size
@@ -32,11 +42,13 @@ import com.tencent.kuikly.compose.foundation.text.BasicTextField
 import com.tencent.kuikly.compose.ui.Alignment
 import com.tencent.kuikly.compose.ui.Modifier
 import com.tencent.kuikly.compose.ui.draw.clip
+import com.tencent.kuikly.compose.ui.draw.clipToBounds
 import com.tencent.kuikly.compose.ui.graphics.Color
 import com.tencent.kuikly.compose.ui.geometry.Offset
 import com.tencent.kuikly.compose.ui.graphics.drawscope.Stroke
 import com.tencent.kuikly.compose.ui.unit.Dp
 import com.tencent.kuikly.compose.ui.graphics.SolidColor
+import com.tencent.kuikly.compose.ui.graphics.StrokeCap
 import com.tencent.kuikly.compose.ui.graphics.graphicsLayer
 import com.tencent.kuikly.compose.ui.input.pointer.pointerInput
 import com.tencent.kuikly.compose.ui.layout.onGloballyPositioned
@@ -45,20 +57,47 @@ import com.tencent.kuikly.compose.ui.text.TextStyle
 import com.tencent.kuikly.compose.ui.unit.dp
 import com.tencent.kuikly.compose.ui.unit.sp
 import com.xlr.k.judge.Rec
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.datetime.toLocalDateTime
 
 /* 记录（旧 apps/mobile-web/src/components/Records.jsx + 2026-10-28 参照图）
-   左侧抽屉：搜索框 → 页签「卦例 / 准则」→ 按天分组列表（日期 · 所问 · ⋮）→ 回收站胶囊 → 设置。
+   左侧抽屉：搜索框 → 页签「卦例 / 准则」→ 按天分组列表（所问 · ⋮）→ 回收站胶囊 → 设置。
    · 点一条 = 打开**详情**（早期版本 `Detail`：‹ 返回列表 / 所问 / 背景 / 起卦 / 当时的断辞 / 准不准·实际情况）
    · ⋮ = 贴行浮出菜单（早期版本 sheetActs：看这一卦 / 应验 / 没应验 / 删）
-   · 左滑 = 只露出「删除」（微信那种跟手）
+   · 列表左右滑切页；删除保留在 ⋮ / 长按菜单内
    ⚠ 还没搬：复制断辞、接着问、复盘（标「没应验」→ 模型说错在哪 → 写入准则）、准则列表、导出导入。 */
 
 /** 记录抽屉的开关缓动（点开/点关走这里；手指拖时由手势直接写 Session.recProg，跟手）。
  *  非线性：开 = easeOutCubic（起手就给出去大半），关 = easeInCubic（先慢后快收回）。 */
 internal object RecDrawer {
     private var job: kotlinx.coroutines.Job? = null
+    var trashOpen by mutableStateOf(false)
+        private set
+    var trashMenuId by mutableStateOf("")
+    var trashConfirmId by mutableStateOf("")
+
+    fun openTrash() {
+        trashOpen = true
+        trashMenuId = ""
+        trashConfirmId = ""
+    }
+
+    fun leaveTrash() {
+        trashOpen = false
+        trashMenuId = ""
+        trashConfirmId = ""
+    }
+
+    fun handleTrashBack(): Boolean {
+        if (!trashOpen) return false
+        when {
+            trashConfirmId.isNotEmpty() -> trashConfirmId = ""
+            trashMenuId.isNotEmpty() -> trashMenuId = ""
+            else -> leaveTrash()
+        }
+        return true
+    }
 
     fun anim(scope: kotlinx.coroutines.CoroutineScope, target: Float) {
         job?.cancel()
@@ -72,6 +111,7 @@ internal object RecDrawer {
             if (kotlin.math.abs(target - from) < 0.002f) {
                 Session.recProg = target
                 Session.recordsOpen = target > 0.5f
+                if (target <= 0.5f) leaveTrash()
                 return@launch
             }
             val dur = if (target > from) 300 else 240
@@ -86,6 +126,7 @@ internal object RecDrawer {
             }
             Session.recProg = target
             Session.recordsOpen = target > 0.5f
+            if (target <= 0.5f) leaveTrash()
         }
     }
 
@@ -103,64 +144,80 @@ internal fun RecordsOverlay() {
     if (!mounted) return
 
     var ver by remember { mutableStateOf(0) }
-    var tab by remember { mutableStateOf("cases") }
+    var settledPage by remember { mutableStateOf(0) }
+    var pagerPosition by remember { mutableStateOf(0f) }
+    var pagerSettling by remember { mutableStateOf(false) }
+    var pagerJob by remember { mutableStateOf<Job?>(null) }
+    val pagerAnimation = remember { Animatable(0f) }
+    // Kuikly requires the animated value to be read in composition, not only in graphicsLayer.
+    val pageFrame = if (pagerSettling) pagerAnimation.value else pagerPosition
     var q by remember { mutableStateOf("") }
     var detailId by remember { mutableStateOf("") }
     /* 准则详情（跟记录一样：列表只出关键句，点进去看结论/依据/来源） */
     var ruleId by remember { mutableStateOf("") }
-    var trashOpen by remember { mutableStateOf(false) }
+    val trashOpen = RecDrawer.trashOpen
+    val caseList = rememberLazyListState()
+    val ruleList = rememberLazyListState()
     var menuId by remember { mutableStateOf("") }
     var menuX by remember { mutableStateOf(0f) }      /* 锚点（根坐标 px） */
     var menuY by remember { mutableStateOf(0f) }
     var menuDots by remember { mutableStateOf(false) } /* true = 从 ⋮ 打开，菜单右沿对齐它 */
-    var swId by remember { mutableStateOf("") }
-    var swDx by remember { mutableStateOf(0f) }
     var canvasW by remember { mutableStateOf(0f) }
     var canvasH by remember { mutableStateOf(0f) }
     var panelW by remember { mutableStateOf(0f) }
-    val rowY = remember { mutableStateMapOf<String, Float>() }
     val dens = LocalDensity.current
-    val delW = with(dens) { 76.dp.toPx() }
-    /* 拉过头：越拖越沉（同 iOS 的 rubber：over*0.30/(1+over/80)），最多再多走一小截 */
-    val softPx = with(dens) { 80.dp.toPx() }
-    fun rubberDx(raw: Float): Float {
-        if (raw >= 0f) return 0f
-        if (raw >= -delW) return raw
-        val over = -raw - delW
-        return -(delW + over * 0.30f / (1f + over / softPx))
-    }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val reducedMotion = Build.VERSION.SDK_INT >= 26 && !ValueAnimator.areAnimatorsEnabled()
+    val easedTrash by animateFloatAsState(
+        targetValue = if (trashOpen) 1f else 0f,
+        animationSpec = tween(if (reducedMotion) 0 else 244, easing = KY_EASE_OUT),
+    )
+    val trashFrame = if (reducedMotion) { if (trashOpen) 1f else 0f } else easedTrash
+    val trashMoving = if (trashOpen) trashFrame < .999f else trashFrame > .001f
+    val drawerWidth = panelW
+    val skipPagerAnimation by rememberUpdatedState(reducedMotion)
 
-    /* 松手：用 easeOutBack 滑到终点（先冲过头一点再回来，Q 弹），不是线性也不是直接吸附 */
-    fun settleRow() {
-        val from = swDx
-        val target = if (swDx < -delW * 0.4f) -delW else 0f
-        if (from == target) return
-        scope.launch {
-            val dur = 300
-            var t = 0
-            while (t <= dur) {
-                val k = t.toFloat() / dur
-                val c1 = 1.70158f
-                val c3 = c1 + 1f
-                val e = 1f + c3 * (k - 1f) * (k - 1f) * (k - 1f) + c1 * (k - 1f) * (k - 1f)
-                swDx = from + (target - from) * e
-                kotlinx.coroutines.delay(16)
-                t += 16
+    fun settlePage(page: Int) {
+        val from = if (pagerSettling) pagerAnimation.value else pagerPosition
+        pagerJob?.cancel()
+        menuId = ""
+        pagerPosition = from
+        fun commit() {
+            val previousPage = settledPage
+            settledPage = page
+            pagerPosition = page.toFloat()
+            if (page != previousPage) {
+                if (page == 0) ruleId = "" else detailId = ""
             }
-            swDx = target
-            if (target == 0f) swId = ""
+            pagerSettling = false
+        }
+        if (skipPagerAnimation || panelW <= 0f || kotlin.math.abs(from - page) < 0.001f) {
+            commit()
+            return
+        }
+        pagerJob = scope.launch {
+            pagerAnimation.snapTo(from)
+            pagerSettling = true
+            val remaining = kotlin.math.abs(from - page)
+            pagerAnimation.animateTo(page.toFloat(), tween((155f + 85f * remaining).toInt(), easing = KY_EASE_OUT))
+            commit()
         }
     }
 
-    val all = remember(ver, Session.recordsOpen) { RecStore.load().reversed() }
-    val dead = remember(ver, Session.recordsOpen) { RecStore.loadDeleted() }
+    val all = remember(ver, Session.recordsOpen, RecStore.caseRevision) { RecStore.load().reversed() }
+    val dead = remember(ver, Session.recordsOpen, RecStore.caseRevision) { RecStore.loadDeleted() }
+    val rules = remember(ver, Session.recordsOpen, RecStore.ruleRevision) { RecStore.loadRules() }
     val rows = remember(all, q) {
         if (q.isBlank()) all else all.filter { r ->
             ((r["q"] ?: "") + (r["duanci"] ?: "")).lowercase().contains(q.lowercase())
         }
     }
-    val detail = rows.firstOrNull { it["id"] == detailId }
+    val detail = if (detailId.isBlank()) null else rows.firstOrNull { it["id"] == detailId }
+    val ruleDetail = if (ruleId.isBlank()) null else rules.firstOrNull { it["id"] == ruleId }
+    val canPageByGesture by rememberUpdatedState(
+        !trashOpen && !trashMoving && !RecallScreen.open && !CardSelection.active && menuId.isEmpty() &&
+            (pagerSettling || if (settledPage == 0) detail == null else ruleDetail == null),
+    )
 
     Box(modifier = Modifier.fillMaxSize().onGloballyPositioned {
         canvasW = it.size.width.toFloat()
@@ -185,99 +242,18 @@ internal fun RecordsOverlay() {
                 /* ⚠ 面板自己吃掉空白处的点击：否则会**穿透到后面那层**（点了就关抽屉/跳回主界面）。
                    ★ 用 tapSwallow 不用 tapNoIndication：后者按下会把整块压到 0.82（长按=整屏变透明）。 */
                 .tapSwallow { menuId = "" }
-                /* 左滑删除：手势挂在**面板**这层（行内那层收不到拖动，只到点击），
-                   起手按 y 认最近的一行；松手 easeOutBack 弹到位 */
-                .pointerInput(CardSelection.active) {
-                    if (CardSelection.active) return@pointerInput
-                    var activeId = ""
-                    /* ★
-                       行的左滑只负责露「删除」（-delW 拉满就停，不带动抽屉）。
-                       起手不在任何一行（页签/空白）时，左滑才收抽屉。 */
-                    var closeDx = 0f
-                    var rawDx = 0f
-                    val driveClose: () -> Unit = {
-                        val w = if (panelW > 0f) panelW else 1f
-                        Session.recDragging = true
-                        Session.recProg = (1f - closeDx / w).coerceIn(0f, 1f)
-                    }
-                    detectHorizontalDragGestures(
-                        onDragStart = { off ->
-                            if (CardSelection.active) return@detectHorizontalDragGestures
-                            closeDx = 0f
-                            val yy = off.y
-                            val rowH = with(dens) { 64.dp.toPx() }
-                            var best = ""
-                            /* 先按「落在这一行的区间里」找；找不到再退回最近的一行 */
-                            for (rr in rows) {
-                                val id = rr["id"] ?: ""
-                                val y0 = rowY[id] ?: -1f
-                                if (y0 >= 0f && yy >= y0 - 6f && yy <= y0 + rowH) { best = id; break }
-                            }
-                            if (best == "") {
-                                var bestD = Float.MAX_VALUE
-                                for (rr in rows) {
-                                    val id = rr["id"] ?: ""
-                                    val y0 = rowY[id] ?: -1f
-                                    if (y0 < 0f) continue
-                                    val d = kotlin.math.abs(y0 - yy)
-                                    if (d < bestD) { bestD = d; best = id }
-                                }
-                            }
-                            /* 起手落在两行之间的空隙里就不算某一行，直接当「收抽屉」手势 */
-                            val near = best.isNotEmpty() && (rowY[best] ?: -1f) >= 0f &&
-                                kotlin.math.abs((rowY[best] ?: 0f) + rowH / 2f - yy) <= rowH * 0.75f
-                            activeId = if (near) best else ""
-                            if (activeId != "") {
-                                if (swId != activeId) { swId = activeId; swDx = 0f }
-                                rawDx = swDx
-                                menuId = ""
-                            }
-                        },
-                        onDragEnd = {
-                            if (CardSelection.active) return@detectHorizontalDragGestures
-                            if (closeDx > 0f || Session.recProg < 0.999f) {
-                                Session.recDragging = false
-                                if (Session.recProg < 0.68f) {
-                                    swDx = 0f; swId = ""
-                                    RecDrawer.close(scope)
-                                } else {
-                                    RecDrawer.open(scope)
-                                    if (activeId != "") settleRow()
-                                }
-                            } else if (activeId != "") settleRow()
-                            activeId = ""
-                            closeDx = 0f
-                        },
-                        onDragCancel = {
-                            if (CardSelection.active) return@detectHorizontalDragGestures
-                            Session.recDragging = false
-                            if (Session.recProg < 0.999f) {
-                                if (Session.recProg < 0.68f) { swDx = 0f; swId = ""; RecDrawer.close(scope) }
-                                else RecDrawer.open(scope)
-                            }
-                            if (activeId != "") settleRow()
-                            activeId = ""
-                            closeDx = 0f
-                        },
-                        onHorizontalDrag = { _, amount ->
-                            if (CardSelection.active) return@detectHorizontalDragGestures
-                            if (activeId != "") {
-                                rawDx = (rawDx + amount).coerceAtMost(0f)
-                                swDx = rubberDx(rawDx)
-                            } else {
-                                /* 空白/页签/空隙起手：左滑直接收抽屉 */
-                                closeDx = (closeDx - amount).coerceAtLeast(0f)
-                                if (closeDx > 0f) driveClose()
-                            }
-                        },
-                    )
-                }
+
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
+                Column(
+                    modifier = Modifier.fillMaxSize().graphicsLayer {
+                        translationX = -trashFrame * drawerWidth
+                        alpha = if (trashFrame >= 1f) 0f else 1f
+                    },
+                ) {
                     /* 搜索框 */
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 12.dp, top = 56.dp, bottom = 10.dp),
+                        modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 56.dp, bottom = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Row(
@@ -304,139 +280,220 @@ internal fun RecordsOverlay() {
                                 )
                             }
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Box(
-                            modifier = Modifier.width(34.dp).height(34.dp).tapNoIndication { RecDrawer.close(scope) },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text_(text = "×", fontSize = 17f, lineHeight = 22f, color = KY_DIM2)
-                        }
                     }
-                    /* 页签 */
-                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp)) {
-                        RecTab("卦例", tab == "cases") { tab = "cases"; detailId = ""; menuId = ""; ruleId = "" }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        RecTab("准则 " + RecStore.loadRules().size, tab == "rules") { tab = "rules"; detailId = ""; menuId = ""; ruleId = "" }
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(KY_LINE))
-
-                    when {
-                        tab == "rules" -> Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                            val rs = RecStore.loadRules()
-                            val cur = rs.firstOrNull { (it["id"] ?: "") == ruleId }
-                            if (cur != null) {
-                                RuleDetail(
-                                    r = cur,
-                                    onBack = { ruleId = "" },
-                                    onDel = { RecStore.delRule(cur["id"] ?: ""); ruleId = ""; ver++ },
-                                )
-                            } else if (rs.isEmpty()) {
-                                Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                                    Text_(
-                                        text = "还没有准则。\n准则只从【你确认过的复盘】里来——不自动写、不偷偷学。",
-                                        fontSize = 11.5f,
-                                        lineHeight = 21f,
-                                        color = KY_DIM2,
-                                    )
+                    val frame = pageFrame
+                    val viewport = panelW
+                    Column(
+                        modifier = Modifier.weight(1f).fillMaxWidth().pointerInput(Unit) {
+                            // Claim only a horizontal swipe on the list/tab region. A vertical list scroll,
+                            // long-press menu or native text selection keeps its original priority.
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false)
+                                if (!canPageByGesture || panelW <= 0f) return@awaitEachGesture
+                                var overSlop = 0f
+                                val start = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
+                                    if (canPageByGesture) {
+                                        overSlop = over
+                                        change.consume()
+                                    }
+                                } ?: return@awaitEachGesture
+                                val w = panelW
+                                val origin = if (pagerSettling) pagerAnimation.value else pagerPosition
+                                pagerJob?.cancel()
+                                pagerSettling = false
+                                menuId = ""
+                                val firstDx = if (start.id == down.id) start.position.x - down.position.x else overSlop
+                                // Include the first move after slop recognition; thereafter each pixel maps
+                                // to exactly one pixel of content travel until the physical end of the track.
+                                var totalDx = firstDx
+                                pagerPosition = (origin - totalDx / w).coerceIn(0f, 1f)
+                                var lastMs = start.uptimeMillis
+                                var velocity = if (lastMs > down.uptimeMillis) {
+                                    firstDx * 1000f / (lastMs - down.uptimeMillis)
+                                } else 0f
+                                val completed = horizontalDrag(start.id) { change ->
+                                    val delta = change.position.x - change.previousPosition.x
+                                    val nextMs = change.uptimeMillis
+                                    if (nextMs > lastMs) {
+                                        val speed = delta * 1000f / (nextMs - lastMs)
+                                        velocity = velocity * .45f + speed * .55f
+                                    }
+                                    lastMs = nextMs
+                                    totalDx += delta
+                                    pagerPosition = (origin - totalDx / w).coerceIn(0f, 1f)
+                                    change.consume()
                                 }
-                            } else {
-                                /* 列表只出关键句（那条准则本身）——依据、来源都收进详情 */
-                                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                                    rs.forEachIndexed { idx, r ->
-                                        item(key = "rule-" + (r["id"] ?: idx.toString())) {
-                                            Column(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .tapNoIndication { ruleId = r["id"] ?: "" }
-                                                    .padding(horizontal = 14.dp, vertical = 11.dp),
-                                            ) {
-                                                Text_(
-                                                    text = r["rule"] ?: "",
-                                                    fontSize = 13f,
-                                                    lineHeight = 21f,
-                                                    weight = 500,
-                                                    maxLines = 2,
-                                                )
-                                                Spacer(modifier = Modifier.height(4.dp))
-                                                Text_(
-                                                    text = "第 " + (idx + 1) + " 条 · " + (r["at"] ?: "") + (if ((r["gua"] ?: "").isNotEmpty()) " · " + r["gua"] else ""),
-                                                    fontSize = 10f,
-                                                    lineHeight = 16f,
-                                                    color = KY_DIM2,
+                                if (!completed) {
+                                    settlePage(settledPage)
+                                } else {
+                                    val minimumFling = 600.dp.toPx()
+                                    val minimumDistance = 14.dp.toPx()
+                                    val upMs = currentEvent.changes.maxOfOrNull { it.uptimeMillis } ?: lastMs
+                                    val fling = upMs - lastMs <= 110L && kotlin.math.abs(velocity) > minimumFling &&
+                                        kotlin.math.abs(totalDx) > minimumDistance && velocity * totalDx > 0f
+                                    val shift = pagerPosition - origin
+                                    val next = when {
+                                        kotlin.math.abs(shift) > .24f || fling -> if (totalDx < 0f) 1 else 0
+                                        else -> if (origin >= .5f) 1 else 0
+                                    }
+                                    settlePage(next)
+                                }
+                            }
+                        },
+                    ) {
+                        RecordPagerTabs(
+                            ruleCount = rules.size,
+                            position = frame,
+                            onTab = { page -> settlePage(page) },
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Box(modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
+                            Box(
+                                modifier = Modifier.fillMaxSize().graphicsLayer {
+                                    translationX = -frame * viewport
+                                    alpha = if (viewport > 0f || settledPage == 0) 1f else 0f
+                                },
+                            ) {
+                                when {
+                                    /* ---- 详情（早期版本 Detail） ---- */
+                                    detail != null -> Box(modifier = Modifier.fillMaxSize()) {
+                                        RecDetail(
+                                            r = detail,
+                                            onChange = { ver++ },
+                                            onBack = { detailId = "" },
+                                            /* 早期版本写完准则会 sdbTab('rules')：详情收起、落在准则列表上 */
+                                            onRuleWritten = { settlePage(1) },
+                                        )
+                                    }
+
+                                    rows.isEmpty() -> Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                                        Text_(
+                                            text = if (q.isBlank())
+                                                "还没有记录。\n每起一卦都会自动记进这里。事后回来标一下准不准——错的卦才值钱。"
+                                            else "没有匹配的记录。",
+                                            fontSize = 11.5f,
+                                            lineHeight = 21f,
+                                            color = KY_DIM2,
+                                        )
+                                    }
+
+                                    else -> LazyColumn(state = caseList, modifier = Modifier.fillMaxSize()) {
+                                        var lastDay: String? = null
+                                        rows.forEachIndexed { index, r ->
+                                            val id = r["id"].orEmpty()
+                                            val day = (r["t"] ?: "").take(10)
+                                            if (day != lastDay) {
+                                                lastDay = day
+                                                item(key = "d-$index-$day") { DayHeader(day) }
+                                            }
+                                            item(key = "r-" + id.ifBlank { "missing-$index" }) {
+                                                RecRow(
+                                                    r = r,
+                                                    onOpen = { detailId = id },
+                                                    onMenu = { mx, my, dots ->
+                                                        /* 长按记录 / 点 ⋮ 都走这里：重档震动一下 */
+                                                        Platform.haptic?.invoke(2)
+                                                        menuId = id
+                                                        menuX = mx
+                                                        menuY = my
+                                                        menuDots = dots
+                                                    },
                                                 )
                                             }
-                                            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(KY_LINE))
                                         }
+                                        item { Spacer(modifier = Modifier.height(12.dp)) }
                                     }
                                 }
                             }
-                        }
-
-                        /* ---- 详情（早期版本 Detail） ---- */
-                        detail != null -> Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                            RecDetail(
-                                r = detail,
-                                onChange = { ver++ },
-                                onBack = { detailId = "" },
-                                /* 早期版本写完准则会 sdbTab('rules')：详情收起、落在准则列表上 */
-                                onRuleWritten = { detailId = ""; tab = "rules" },
-                            )
-                        }
-
-                        rows.isEmpty() -> Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(16.dp)) {
-                            Text_(
-                                text = if (q.isBlank())
-                                    "还没有记录。\n每起一卦都会自动记进这里。事后回来标一下准不准——错的卦才值钱。"
-                                else "没有匹配的记录。",
-                                fontSize = 11.5f,
-                                lineHeight = 21f,
-                                color = KY_DIM2,
-                            )
-                        }
-
-                        else -> LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                            var lastDay = ""
-                            rows.forEach { r ->
-                                val id = r["id"] ?: ""
-                                val day = (r["t"] ?: "").take(10)
-                                if (day != lastDay) {
-                                    lastDay = day
-                                    item(key = "d-" + day) { DayHeader(day) }
-                                }
-                                item(key = "r-" + id) {
-                                    RecRow(
-                                        r = r,
-                                        swipedDx = if (swId == id) swDx else 0f,
-                                        delW = delW,
-                                        onY = { y -> rowY[id] = y },
-                                        onOpen = { detailId = id },
-                                        /* 这里累加（不能用行里捕获的 dx，pointerInput(Unit) 会把它冻在首帧） */
-                                        onSwipe = { d2 -> swId = id; swDx = (swDx + d2).coerceIn(-delW, 0f) },
-                                        onSwipeEnd = { settleRow() },
-                                        onMenu = { mx, my, dots ->
-                                            /* 长按记录 / 点 ⋮ 都走这里：重档震动一下 */
-                                            Platform.haptic?.invoke(2)
-                                            menuId = id
-                                            menuX = mx
-                                            menuY = my
-                                            menuDots = dots
-                                        },
-                                        onDelete = {
-                                            RecStore.del(id)
-                                            swId = ""; swDx = 0f
-                                            ver++
-                                        },
-                                    )
-                                }
+                            Box(
+                                modifier = Modifier.fillMaxSize().graphicsLayer {
+                                    translationX = (1f - frame) * viewport
+                                    alpha = if (viewport > 0f || settledPage == 1) 1f else 0f
+                                },
+                            ) {
+                                    if (ruleDetail != null) {
+                                        RuleDetail(
+                                            r = ruleDetail,
+                                            onBack = { ruleId = "" },
+                                            onDel = { RecStore.delRule(ruleDetail["id"] ?: ""); ruleId = ""; ver++ },
+                                        )
+                                    } else if (rules.isEmpty()) {
+                                        Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                                            Text_(
+                                                text = "还没有准则。\n准则只从【你确认过的复盘】里来——不自动写、不偷偷学。",
+                                                fontSize = 11.5f,
+                                                lineHeight = 21f,
+                                                color = KY_DIM2,
+                                            )
+                                        }
+                                    } else {
+                                        /* 列表只出关键句（那条准则本身）——依据、来源都收进详情 */
+                                        LazyColumn(state = ruleList, modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+                                            rules.forEachIndexed { idx, r ->
+                                                item(key = "rule-" + (r["id"] ?: idx.toString())) {
+                                                    Column(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .recordRowPress(onTap = { ruleId = r["id"] ?: "" })
+                                                            .padding(horizontal = 10.dp, vertical = 13.dp),
+                                                    ) {
+                                                        Text_(
+                                                            text = r["rule"].orEmpty().ifBlank { "未填写准则" },
+                                                            fontSize = 13f,
+                                                            lineHeight = 21f,
+                                                            weight = 500,
+                                                            maxLines = 2,
+                                                        )
+                                                        Spacer(modifier = Modifier.height(4.dp))
+                                                        Text_(
+                                                            text = "第 " + (idx + 1) + " 条 · " + (r["at"] ?: "") + (if ((r["gua"] ?: "").isNotEmpty()) " · " + r["gua"] else ""),
+                                                            fontSize = 10f,
+                                                            lineHeight = 16f,
+                                                            color = KY_DIM2,
+                                                        )
+                                                    }
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                }
+                                            }
+                                        }
+                                    }
                             }
-                            item { Spacer(modifier = Modifier.height(12.dp)) }
                         }
                     }
 
-                    /* 底栏：回收站胶囊 + 分隔 + 居中设置 */
-                    if (detail == null) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
+                    /* 底栏：回收站胶囊 + 居中设置 */
+                    if (!(settledPage == 0 && detail != null)) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().pointerInput(Unit) {
+                                // The footer is outside the pager: only here is a left drag still
+                                // the old close-drawer shortcut. System edge Back is untouched.
+                                var start = 1f
+                                var dx = 0f
+                                detectHorizontalDragGestures(
+                                    onDragStart = { start = Session.recProg; dx = 0f },
+                                    onHorizontalDrag = { _, delta ->
+                                        if (panelW <= 0f) return@detectHorizontalDragGestures
+                                        dx += delta
+                                        if (dx < 0f || Session.recDragging) {
+                                            Session.recDragging = true
+                                            Session.recProg = (start + dx / panelW).coerceIn(0f, 1f)
+                                        }
+                                    },
+                                    onDragEnd = {
+                                        if (Session.recDragging) {
+                                            Session.recDragging = false
+                                            if (Session.recProg < .68f) RecDrawer.close(scope) else RecDrawer.open(scope)
+                                        }
+                                    },
+                                    onDragCancel = {
+                                        if (Session.recDragging) {
+                                            Session.recDragging = false
+                                            RecDrawer.open(scope)
+                                        }
+                                    },
+                                )
+                            },
+                        ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -447,7 +504,12 @@ internal fun RecordsOverlay() {
                                         .height(36.dp)
                                         .clip(RoundedCornerShape(18.dp))
                                         .glassMaterial(RoundedCornerShape(18.dp), control = true)
-                                        .tapNoIndication { trashOpen = !trashOpen }
+                                        .tapNoIndication {
+                                            menuId = ""
+                                            dismissIme()
+                                            CardSelection.cancel()
+                                            RecDrawer.openTrash()
+                                        }
                                         .padding(horizontal = 12.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
@@ -458,43 +520,9 @@ internal fun RecordsOverlay() {
                                         color = KY_DIM2,
                                     )
                                     Spacer(modifier = Modifier.weight(1f))
-                                    Text_(text = if (trashOpen) "˄" else "˅", fontSize = 11f, lineHeight = 16f, color = KY_DIM2)
+                                    RecordDrawerGlyph("enter")
                                 }
                             }
-                            if (trashOpen) {
-                                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp)) {
-                                    if (dead.isEmpty()) {
-                                        Text_(
-                                            text = "回收站是空的。删掉的记录会先来这里，可以还原。",
-                                            fontSize = 10.5f,
-                                            lineHeight = 18f,
-                                            color = KY_DIM2,
-                                        )
-                                    } else {
-                                        dead.takeLast(10).forEach { d ->
-                                            val id = d["id"] ?: ""
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                            ) {
-                                                Text_(
-                                                    text = (d["q"] ?: ""),
-                                                    fontSize = 11f,
-                                                    lineHeight = 18f,
-                                                    maxLines = 1,
-                                                    color = KY_DIM,
-                                                    modifier = Modifier.weight(1f),
-                                                )
-                                                SetBtn("还原", small = true) { RecStore.restore(id); ver++ }
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                SetBtn("彻底删", danger = true, small = true) { RecStore.purge(id); ver++ }
-                                            }
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                }
-                            }
-                            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(KY_LINE))
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -528,8 +556,24 @@ internal fun RecordsOverlay() {
                     }
                 }
 
+                if (trashOpen || trashFrame > .001f) {
+                    Box(
+                        modifier = Modifier.fillMaxSize().graphicsLayer {
+                            translationX = (1f - trashFrame) * drawerWidth
+                            alpha = if (drawerWidth > 0f || trashFrame >= 1f) 1f else 0f
+                        }.tapSwallow { },
+                    ) {
+                        RecordsTrashPage(
+                            dead = dead,
+                            onBack = { RecDrawer.leaveTrash() },
+                            onChanged = { ver++ },
+                        )
+                    }
+                }
+                if (trashMoving) Box(modifier = Modifier.fillMaxSize().tapSwallow { })
+
                 /* ---- ⋮ 贴行浮出菜单（早期版本 .cr-menu / sheetActs） ---- */
-                val rec = rows.firstOrNull { it["id"] == menuId }
+                val rec = if (trashOpen || trashMoving || menuId.isBlank()) null else rows.firstOrNull { it["id"] == menuId }
                 if (rec != null) {
                     /* ---- 位置：长按贴手指、点 ⋮ 对齐 ⋮；放不下就翻到上面 ---- */
                     val nItem = if (rec["ans"] == "model") 6 else 5
@@ -611,6 +655,161 @@ internal fun RecordsOverlay() {
     }
 }
 
+private fun recordQuestion(record: Rec): String =
+    record["q"].orEmpty().trim().ifBlank { "未填写所问" }
+
+/** 行平时不铺底；按下只浮一层当前皮肤的淡墨，不移动文字，也不把整个抽屉变透明。 */
+@Composable
+private fun Modifier.recordRowPress(
+    onTap: () -> Unit,
+    onLongPress: ((Offset) -> Unit)? = null,
+): Modifier {
+    var pressed by remember { mutableStateOf(false) }
+    val tap = rememberUpdatedState(onTap)
+    val long = rememberUpdatedState(onLongPress)
+    val tint by animateFloatAsState(
+        targetValue = if (pressed) 0.055f else 0f,
+        animationSpec = tween(if (pressed) 90 else 130, easing = KY_EASE_OUT),
+    )
+    val shape = RoundedCornerShape(15.dp)
+    return clip(shape).background(KY_INK.copy(alpha = tint))
+        .pointerInput(onLongPress != null) {
+            detectTapGestures(
+                onTap = { tap.value() },
+                onLongPress = if (onLongPress == null) null else { point -> long.value?.invoke(point) },
+                onPress = {
+                    pressed = true
+                    try { tryAwaitRelease() } finally { pressed = false }
+                },
+            )
+        }
+}
+
+/** 同一个抽屉内的下一级，没有第二个关闭整抽屉的按钮。 */
+@Composable
+private fun RecordsTrashPage(dead: List<Rec>, onBack: () -> Unit, onChanged: () -> Unit) {
+    val listState = rememberLazyListState()
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 16.dp, top = 49.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier.size(44.dp).recordRowPress(onTap = onBack),
+                contentAlignment = Alignment.Center,
+            ) {
+                RecordDrawerGlyph("back")
+            }
+            Text_("回收站", fontSize = 18f, lineHeight = 28f, weight = 500)
+        }
+        if (dead.isEmpty()) {
+            Text_(
+                "回收站是空的。删掉的卦例会先留在这里，可以还原。",
+                fontSize = 12f,
+                lineHeight = 22f,
+                color = KY_DIM2,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+            )
+        } else {
+            LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 14.dp)) {
+                dead.asReversed().forEachIndexed { index, record ->
+                    val id = record["id"].orEmpty()
+                    item(key = "trash-$index-$id") {
+                        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 5.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(start = 9.dp, top = 7.dp, bottom = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text_(
+                                    text = recordQuestion(record),
+                                    fontSize = 13f,
+                                    lineHeight = 21f,
+                                    weight = 500,
+                                    maxLines = 2,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                if (id.isNotBlank()) {
+                                    Box(
+                                        modifier = Modifier.height(44.dp).recordRowPress(onTap = {
+                                            RecDrawer.trashMenuId = ""
+                                            RecDrawer.trashConfirmId = ""
+                                            RecStore.restore(id)
+                                            onChanged()
+                                        }).padding(horizontal = 9.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text_("还原", fontSize = 12f, lineHeight = 19f, color = KY_DIM)
+                                    }
+                                    Box(
+                                        modifier = Modifier.size(42.dp).recordRowPress(onTap = {
+                                            RecDrawer.trashConfirmId = ""
+                                            RecDrawer.trashMenuId = if (RecDrawer.trashMenuId == id) "" else id
+                                        }),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        RecordDrawerGlyph("more")
+                                    }
+                                }
+                            }
+                            if (id.isNotBlank() && RecDrawer.trashConfirmId == id) {
+                                Column(modifier = Modifier.fillMaxWidth().padding(start = 9.dp, bottom = 11.dp)) {
+                                    Text_(
+                                        "彻底删除后无法恢复。",
+                                        fontSize = 11.5f,
+                                        lineHeight = 19f,
+                                        color = KY_DIM2,
+                                    )
+                                    Spacer(modifier = Modifier.height(7.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        SetBtn("取消", small = true) { RecDrawer.trashConfirmId = "" }
+                                        Spacer(modifier = Modifier.width(7.dp))
+                                        SetBtn("确认彻底删除", danger = true, small = true) {
+                                            RecDrawer.trashConfirmId = ""
+                                            RecStore.purge(id)
+                                            onChanged()
+                                        }
+                                    }
+                                }
+                            } else if (id.isNotBlank() && RecDrawer.trashMenuId == id) {
+                                Row(modifier = Modifier.fillMaxWidth().padding(start = 9.dp, bottom = 8.dp)) {
+                                    SetBtn("彻底删除…", danger = true, small = true) {
+                                        RecDrawer.trashMenuId = ""
+                                        RecDrawer.trashConfirmId = id
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                item { Spacer(modifier = Modifier.height(14.dp)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecordDrawerGlyph(kind: String) {
+    val ink = KY_DIM
+    Canvas(modifier = Modifier.size(if (kind == "enter" || kind == "more") 16.dp else 20.dp)) {
+        fun at(x: Float, y: Float) = Offset(size.width * x, size.height * y)
+        fun stroke(a: Offset, b: Offset) = drawLine(ink, a, b, strokeWidth = size.width * .085f, cap = StrokeCap.Round)
+        when (kind) {
+            "back" -> {
+                stroke(at(.24f, .50f), at(.80f, .50f))
+                stroke(at(.24f, .50f), at(.51f, .23f))
+                stroke(at(.24f, .50f), at(.51f, .77f))
+            }
+            "enter" -> {
+                stroke(at(.39f, .24f), at(.65f, .50f))
+                stroke(at(.65f, .50f), at(.39f, .76f))
+            }
+            "more" -> for (y in listOf(.25f, .50f, .75f)) {
+                drawCircle(ink, radius = size.width * .059f, center = at(.50f, y))
+            }
+        }
+    }
+}
+
 @Composable
 private fun MenuItem(label: String, danger: Boolean = false, onClick: () -> Unit) {
     Box(
@@ -630,112 +829,42 @@ private fun MenuItem(label: String, danger: Boolean = false, onClick: () -> Unit
     }
 }
 
-/* 一行：左滑露出「删除」（跟手，宽随拖距） */
+/** 每行点击、长按和 ⋮ 保持不变；横向拖动由外层页轨接管。 */
 @Composable
 private fun RecRow(
     r: Rec,
-    swipedDx: Float,
-    delW: Float,
-    onY: (Float) -> Unit,
     onOpen: () -> Unit,
-    onSwipe: (Float) -> Unit,
-    onSwipeEnd: () -> Unit,
-    /* x,y = 根坐标下的锚点；dots = 来自 ⋮（菜单右沿对齐它）还是长按（贴着手指） */
     onMenu: (Float, Float, Boolean) -> Unit,
-    onDelete: () -> Unit,
 ) {
-    val fb = r["fb"] ?: ""
     val dens = LocalDensity.current
-    val dx = swipedDx
-    /* 两个块在根坐标里的位置：长按点 / ⋮ 的锚点都靠它换算（⛔ 别再按行高猜） */
-    var qAt by remember { mutableStateOf(com.tencent.kuikly.compose.ui.geometry.Offset.Zero) }
-    var dotAt by remember { mutableStateOf(com.tencent.kuikly.compose.ui.geometry.Offset.Zero) }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 4.dp)
-            .onGloballyPositioned { onY(it.localToRoot(com.tencent.kuikly.compose.ui.geometry.Offset.Zero).y) }
+    var qAt by remember { mutableStateOf(Offset.Zero) }
+    var dotAt by remember { mutableStateOf(Offset.Zero) }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp).height(56.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        /* 删除键（贴着右边，宽随拖距） */
-        if (dx < 0f) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .width(with(dens) { (-dx).toFloat().toDp() })
-                    .height(with(dens) { 56.dp })
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0.72f, 0.20f, 0.16f))
-                    .tapNoIndication { onDelete() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text_(text = "删除", fontSize = 12.5f, lineHeight = 18f, color = Color(1f, 1f, 1f))
-            }
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .graphicsLayer { translationX = dx }
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color.Transparent),
-            verticalAlignment = Alignment.CenterVertically,
+        Box(
+            modifier = Modifier.weight(1f).height(56.dp)
+                .onGloballyPositioned { qAt = it.localToRoot(Offset.Zero) }
+                .recordRowPress(
+                    onTap = onOpen,
+                    onLongPress = { off -> onMenu(qAt.x + off.x, qAt.y + off.y, false) },
+                )
+                .padding(horizontal = 8.dp),
+            contentAlignment = Alignment.CenterStart,
         ) {
-            /* 手势层与点击层分开：外层只管左滑，内层只管点开（同一层会把 ⋮ 的点击吃掉） */
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .tapNoIndication { }
-                    .padding(start = 10.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text_(text = monthDay(r["t"] ?: ""), fontSize = 10f, lineHeight = 16f, color = KY_DIM2)
-                Spacer(modifier = Modifier.width(8.dp))
-                /* 只有「所问」这一块可点开；⋮ 是另一块，别把点击抢走。
-                   长按同一块 = 出那个选项面板（早期版本：长按一条记录、或点 ⋮，都是同一个面板） */
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(56.dp)
-                        .onGloballyPositioned {
-                            qAt = it.localToRoot(com.tencent.kuikly.compose.ui.geometry.Offset.Zero)
-                        }
-                        .tapOrLongPress(
-                            onTap = { if (dx < 0f) onSwipeEnd() else onOpen() },
-                            onLongPress = { if (dx < 0f) onSwipeEnd() else onMenu(qAt.x, qAt.y + with(dens) { 28.dp.toPx() }, false) },
-                            onLongPressAt = { off ->
-                                if (dx < 0f) onSwipeEnd()
-                                else onMenu(qAt.x + off.x, qAt.y + off.y, false)
-                            },
-                        ),
-                    contentAlignment = Alignment.CenterStart,
-                ) {
-                    Text_(
-                        text = r["q"] ?: "",
-                        fontSize = 12.5f,
-                        lineHeight = 20f,
-                        weight = 500,
-                        maxLines = 1,
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .width(34.dp)
-                        .height(34.dp)
-                        .onGloballyPositioned {
-                            dotAt = it.localToRoot(com.tencent.kuikly.compose.ui.geometry.Offset.Zero)
-                        }
-                        .tapNoIndication {
-                            /* 锚点 = ⋮ 的右下角：菜单右沿对齐它、贴在它下面 */
-                            val s = with(dens) { 34.dp.toPx() }
-                            onMenu(dotAt.x + s, dotAt.y + s, true)
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text_(text = "⋮", fontSize = 15f, lineHeight = 20f, color = KY_DIM2)
-                }
-            }
+            Text_(text = recordQuestion(r), fontSize = 13f, lineHeight = 21f, weight = 500, maxLines = 2)
+        }
+        Box(
+            modifier = Modifier.size(42.dp)
+                .onGloballyPositioned { dotAt = it.localToRoot(Offset.Zero) }
+                .tapNoIndication {
+                    val sizePx = with(dens) { 42.dp.toPx() }
+                    onMenu(dotAt.x + sizePx, dotAt.y + sizePx, true)
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            RecordDrawerGlyph("more")
         }
     }
 }
@@ -945,13 +1074,6 @@ private fun RuleDetail(r: Rec, onBack: () -> Unit, onDel: () -> Unit) {
     }
 }
 
-private fun monthDay(t: String): String {
-    if (t.length < 10) return t
-    val mm = t.substring(5, 7).trimStart('0')
-    val dd = t.substring(8, 10).trimStart('0')
-    return mm + "·" + dd
-}
-
 @Composable
 private fun DayHeader(day: String) {
     val today = kotlinx.datetime.Clock.System.now()
@@ -961,12 +1083,13 @@ private fun DayHeader(day: String) {
     val ydDate = kotlinx.datetime.LocalDate.fromEpochDays(today.date.toEpochDays() - 1)
     val yd = "" + ydDate.year + p(ydDate.monthNumber) + p(ydDate.dayOfMonth)
     val label = when (day.replace("-", "")) {
+        "" -> "日期不详"
         td -> "今天"
         yd -> "昨天"
         else -> {
             val mm = day.drop(5).take(2).trimStart('0')
             val dd = day.drop(8).take(2).trimStart('0')
-            if (day.substring(0, 4) == td.substring(0, 4)) mm + " 月 " + dd + " 日" else day
+            if (day.length >= 8 && day.take(4) == td.take(4)) mm + " 月 " + dd + " 日" else day
         }
     }
     Text_(
@@ -978,26 +1101,32 @@ private fun DayHeader(day: String) {
     )
 }
 
+/** 两个常驻等宽标签，只有一根短线，和内容共用同一个进度。 */
 @Composable
-private fun RecTab(label: String, on: Boolean, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier.tapNoIndication { onClick() },
-        horizontalAlignment = Alignment.CenterHorizontally,
+private fun RecordPagerTabs(ruleCount: Int, position: Float, onTab: (Int) -> Unit) {
+    val accent = KY_ACCENT
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 3.dp)) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            RecTab("卦例", position < .5f, Modifier.weight(1f)) { onTab(0) }
+            RecTab("准则 $ruleCount", position >= .5f, Modifier.weight(1f)) { onTab(1) }
+        }
+        Canvas(modifier = Modifier.fillMaxWidth().height(2.dp)) {
+            val x = size.width * (.25f + position * .5f)
+            val half = 9.dp.toPx()
+            drawLine(accent, Offset(x - half, center.y), Offset(x + half, center.y),
+                strokeWidth = size.height, cap = StrokeCap.Round)
+        }
+    }
+}
+
+@Composable
+private fun RecTab(label: String, on: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Box(
+        modifier = modifier.height(42.dp).recordRowPress(onTap = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Text_(
-            text = label,
-            fontSize = 12.5f,
-            lineHeight = 20f,
-            weight = if (on) 500 else 400,
-            color = if (on) KY_INK else KY_DIM2,
-            modifier = Modifier.padding(vertical = 8.dp),
-        )
-        Box(
-            modifier = Modifier
-                .width(if (on) 18.dp else 0.dp)
-                .height(2.dp)
-                .background(if (on) KY_ACCENT else Color(0f, 0f, 0f, 0f))
-        )
+        Text_(text = label, fontSize = 12.5f, lineHeight = 20f,
+            weight = if (on) 500 else 400, color = if (on) KY_INK else KY_DIM2)
     }
 }
 

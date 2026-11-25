@@ -1,0 +1,31 @@
+.hg-reminder {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  margin-top: 1.25rem;
+  padding: 2px 4px 2px 2px;
+  gap: 1px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface2) 48%, transparent);
+  line-height: 1.2;
+}
+.hg-reminder button {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+}
+.hg-reminder button:hover { background: var(--accent-bg); color: var(--ink); }
+.hg-reminder-open {
+  display: inline-flex;
+  align-items: center;
+  min-height: 35px;
+  padding: 4px 9px 4px 12px;
+  gap: .65em;
+  font-size: 12px;
+}
+.hg-reminder-open strong { color: var(--ink); font-weight: 600; }
+.hg-reminder-arrow { color: var(--accent); font-size: 17px; line-height: .8; }
+.hg-reminder-close { width: 31px; min-height: 33px; font-size: 16px; }

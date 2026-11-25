@@ -1,0 +1,122 @@
+.hg-dialog .hg-sky-stage {
+  --hg-atlas-day: color-mix(in srgb, var(--hg-tone-glow, #55758d) 78%, var(--ink, #242e3d));
+  --hg-atlas-night: color-mix(in srgb, var(--hg-tone-air, #8da8c4) 75%, #a6b4be);
+  --hg-atlas-current: color-mix(in srgb, var(--hg-atlas-night) var(--hg-sky-night, 0%), var(--hg-atlas-day));
+  --hg-atlas-dipper: color-mix(in srgb, #ba935c 52%, var(--hg-atlas-current));
+  --hg-case-day: color-mix(in srgb, #557f98 76%, var(--ink, #242e3d));
+  --hg-case-gold: color-mix(in srgb, #ae784f 78%, var(--ink, #242e3d));
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.hg-dialog .hg-sky-svg { display: block; inline-size: 100%; block-size: 100%; overflow: hidden; }
+.hg-dialog .hg-atlas-camera { color: var(--hg-atlas-current); }
+.hg-dialog :is(.hg-atlas-ring, .hg-atlas-boundaries path, .hg-atlas-line, .hg-atlas-north-pole) {
+  fill: none; stroke: currentColor; stroke-width: .91;
+}
+.hg-dialog .hg-atlas-ring { stroke-width: .78; }
+.hg-dialog .hg-atlas-boundaries path { opacity: .63; }
+.hg-dialog :is(.hg-atlas-boundaries text, .hg-trace-date text) {
+  fill: currentColor; text-anchor: middle; dominant-baseline: central;
+  font: 500 14px 'Noto Serif CJK SC', 'Songti SC', SimSun, serif;
+}
+.hg-dialog .hg-atlas-boundaries text { opacity: .65; }
+.hg-dialog .hg-atlas-asterism.enclosure { opacity: .46; }
+.hg-dialog .hg-atlas-asterism.principal { opacity: .67; }
+.hg-dialog .hg-atlas-asterism.dipper { color: var(--hg-atlas-dipper); }
+.hg-dialog .hg-atlas-asterism.dipper .hg-atlas-line { stroke-width: 1.5; }
+.hg-dialog .hg-atlas-dot { fill: currentColor; }
+.hg-dialog .hg-atlas-north-pole { opacity: .62; stroke-width: .9; }
+.hg-dialog .hg-trace-date text {
+  color: var(--hg-atlas-day);
+  font: 400 16px Georgia, serif;
+}
+.hg-dialog .hg-sky-record {
+  --hg-trace-base: var(--hg-case-day);
+  --hg-trace-category: #a4c1d4;
+  fill: color-mix(in srgb, var(--hg-trace-category) var(--hg-sky-night, 0%), var(--hg-trace-base));
+}
+.hg-dialog .hg-sky-record.is-noted { --hg-trace-base: var(--hg-case-gold); }
+.hg-dialog .hg-sky-record[data-trace-category="0"] { --hg-trace-category: #e9c1a0; }
+.hg-dialog .hg-sky-record[data-trace-category="1"] { --hg-trace-category: #d8dbd1; }
+@media (max-width: 690px) {
+  .hg-dialog .hg-atlas-boundaries text { font-size: 16px; }
+  .hg-dialog .hg-trace-date text { font-size: 13px; }
+}
+
+.hg-dialog .hg-sky-stage {
+  --hg-dipper-aura:color-mix(in srgb,#789bb3 78%,var(--hg-tone-air,#c6ab78));
+  --hg-dipper-bloom:color-mix(in srgb,#c98545 72%,var(--hg-atlas-current));
+  --hg-atlas-sway:9px;
+}
+.hg-dialog :is(.hg-atlas-idle,.hg-trace-lift) {
+  animation:hg-atlas-breath 8.8s ease-in-out infinite;
+}
+.hg-dialog .hg-trace-lift { --hg-atlas-rest:var(--hg-trace-rest,0); }
+@keyframes hg-atlas-breath {
+  0%,100% { transform:translate3d(0,calc(var(--hg-atlas-sway) * var(--hg-atlas-rest,1) * .38),0); }
+  50% { transform:translate3d(0,calc(var(--hg-atlas-sway) * var(--hg-atlas-rest,1) * -.89),0); }
+}
+.hg-dialog .hg-dipper-optics {
+  animation:hg-dipper-scintillation 6.7s ease-in-out infinite alternate;
+}
+@keyframes hg-dipper-scintillation {
+  0% { opacity:.65; }
+  62% { opacity:1; }
+  100% { opacity:.80; }
+}
+.hg-dialog .hg-dipper-kernel {
+  fill:color-mix(in srgb,#705743 66%,var(--hg-atlas-current));
+  stroke:#fff2ce88;
+  stroke-width:.53;
+}
+.hg-dialog .hg-dipper-white-point { fill:#fff8dc; opacity:.96; }
+@media (max-width:690px) {
+  .hg-dialog .hg-sky-stage { --hg-atlas-sway:7px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .hg-dialog :is(.hg-atlas-idle,.hg-trace-lift,.hg-dipper-optics) { animation:none; }
+}
+
+/* Asterism light moves in its own tempo; the dot and line underneath retain
+ * their astronomical positions. Only 16 small glows and 8 short line
+ * accents animate, and their timing is staggered without a JS frame loop. */
+.hg-dialog .hg-sky-stage {
+  --hg-wake-day:color-mix(in srgb,var(--hg-atlas-day) 65%,var(--hg-tone-air,#a5b8c8));
+  --hg-wake-night:color-mix(in srgb,var(--hg-tone-tint,#d2e0ec) 67%,#e1e7ed);
+  --hg-wake-color:color-mix(in srgb,var(--hg-wake-night) var(--hg-sky-night,0%),var(--hg-wake-day));
+  --hg-wake-distance:1;
+}
+.hg-dialog .hg-mansion-wake {
+  animation:hg-mansion-drift var(--hg-wake-time) var(--hg-wake-delay) ease-in-out infinite;
+}
+@keyframes hg-mansion-drift {
+  0%,100% { opacity:.24; transform:translate(0,0); }
+  33% {
+    opacity:.86;
+    transform:translate(calc(var(--hg-wake-x) * var(--hg-wake-distance)),calc(var(--hg-wake-y) * var(--hg-wake-distance)));
+  }
+  68% {
+    opacity:.47;
+    transform:translate(calc(var(--hg-wake-x) * var(--hg-wake-distance) * -.38),calc(var(--hg-wake-y) * var(--hg-wake-distance) * -.66));
+  }
+}
+.hg-dialog .hg-mansion-current {
+  fill:none; stroke:var(--hg-wake-color); stroke-width:1.85; stroke-linecap:round;
+  stroke-dasharray:13 119; stroke-dashoffset:18;
+  animation:hg-mansion-current var(--hg-current-time) var(--hg-current-delay) linear infinite;
+}
+@keyframes hg-mansion-current {
+  0%,21% { opacity:0; stroke-dashoffset:18; }
+  35% { opacity:.79; stroke-dashoffset:-12; }
+  54% { opacity:.38; stroke-dashoffset:-68; }
+  70%,100% { opacity:0; stroke-dashoffset:-104; }
+}
+@media (max-width:690px) {
+  .hg-dialog .hg-sky-stage { --hg-wake-distance:.86; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .hg-dialog :is(.hg-mansion-wake,.hg-mansion-current) { display:none; animation:none; }
+}

@@ -102,6 +102,7 @@ private fun RootScreen() {
     var step by remember { mutableStateOf(XlrStep.YI) }
     /* 一屏宽（px）。三页并排，轨道按 -index*w + 跟手位移 平铺 */
     var wPx by remember { mutableStateOf(0f) }
+    var mainHeightPx by remember { mutableStateOf(0) }
     /* 轨道当前平移量（px，负值＝往左走）。跟手时同步改它，落位时用 settle 动画到目标 */
     var posX by remember { mutableStateOf(0f) }
     val settle = remember { Animatable(0f) }
@@ -261,6 +262,14 @@ private fun RootScreen() {
     }
 
     var dragAcc by remember { mutableStateOf(0f) }
+    val reminderEligible = recallForeground && step == XlrStep.YI &&
+        mainHeightPx >= with(dens) { 560.dp.toPx() } && !settling && abs(posX) < 1f &&
+        Session.chromeReveal && !Session.splashOn && !Session.guideOn && Session.guideZoom == null &&
+        !Session.recordsOpen && Session.recProg <= 0f && !Session.settingsOpen && !RecallScreen.open &&
+        !Session.skinMenuOpen && !Session.moreOpen && !Session.detailOpen && Session.picker == null &&
+        !Session.evidenceOpen && !Platform.imeVisible && !Platform.anchorOn && !CardSelection.active &&
+        !CastFx.playing
+    val (recallReminder, dismissRecallReminder) = currentRecallReminder(reminderEligible)
     /* 宿主窗口底色跟着皮肤/昼夜变：详情展开时底部内边距让出来的那块是页面色，不是白（） */
     val pageBg = KY_BG
     SideEffect { Platform.setPageBg?.invoke(pageBg.red, pageBg.green, pageBg.blue) }
@@ -299,7 +308,7 @@ private fun RootScreen() {
                 detectHorizontalDragGestures(
                     onDragStart = {
                         blocked = CardSelection.active || Session.recordsOpen || Session.settingsOpen ||
-                            Session.guideOn || Session.skinMenuOpen || Session.splashOn
+                            Session.guideOn || Session.skinMenuOpen || Session.splashOn || RecallScreen.open
                         drawerMode = false
                         drawerAcc = 0f
                         dirDecided = false
@@ -464,11 +473,14 @@ private fun RootScreen() {
             modifier = Modifier
                 .fillMaxSize()
                 .clipToBounds()
-                .onSizeChanged { if (it.width > 0) wPx = it.width.toFloat() }
+                .onSizeChanged {
+                    if (it.width > 0) wPx = it.width.toFloat()
+                    mainHeightPx = it.height
+                }
         ) {
             val cur = if (settling) settle.value else posX
             Box(modifier = Modifier.fillMaxSize().graphicsLayer { translationX = cur }) {
-                YiContent(onCast = tryCast)
+                YiContent(onCast = tryCast, recallReminder = recallReminder, dismissRecallReminder = dismissRecallReminder)
             }
             Box(modifier = Modifier.fillMaxSize().graphicsLayer { translationX = cur + wPx }) {
                 GuaContent(onNext = { step = XlrStep.JIE }, active = step == XlrStep.GUA, onBack = { step = XlrStep.YI })
@@ -490,6 +502,7 @@ private fun RootScreen() {
         AskPicker()
         SettingsOverlay()
         RecordsOverlay()
+        RecallOverlay()
         SplashOverlay()
         GuideOverlay()
         AppToast()
@@ -511,6 +524,7 @@ private var backArmedAt = 0L
 internal var pageScope: kotlinx.coroutines.CoroutineScope? = null
 
 internal fun handleBack(): Boolean {
+    if (RecallScreen.back()) return true
     // Back first leaves text selection, not the detail/page containing it.
     if (CardSelection.active) { CardSelection.cancel(); return true }
     if (Session.guideZoom != null) {
@@ -543,6 +557,7 @@ internal fun handleBack(): Boolean {
         return true
     }
     if (Session.recordsOpen) {
+        if (RecDrawer.handleTrashBack()) return true
         val sc = pageScope
         if (sc != null) {
             RecDrawer.close(sc)

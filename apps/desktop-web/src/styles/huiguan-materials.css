@@ -1,0 +1,92 @@
+.hg-material-layer {position:absolute;inset:0;overflow:hidden;isolation:isolate;pointer-events:none}
+.hg-material-patch {
+  position:absolute;display:block;overflow:hidden;pointer-events:none;user-select:none;
+  max-width:none;height:auto;
+}
+/* The spring layer extends behind the entire report, not just the SVG that
+   stops at the header/footer, but the only painted patch is short. */
+.hg-material-paper-bleed {z-index:-1}
+.hg-material-spring-image {
+  left:-21px;top:37%;width:clamp(74px,10%,112px);
+  mask-image:radial-gradient(ellipse 68% 49% at 4% 50%,#000 12%,#000c 40%,#0006 63%,transparent 95%);
+}
+/* Awns enter from the corner, still one uninterrupted photographic crop.
+   The left/top/bottom fade leaves the arc intact without an oval cutout. */
+.hg-material-grain-image {
+  width:clamp(170px,31%,380px);right:-2%;bottom:0%;transform-origin:81% 86%;
+  filter:saturate(.85);
+  mask-image:
+    radial-gradient(ellipse 72% 73% at 83% 65%,#000 21%,#000e 48%,#0006 74%,transparent 100%),
+    linear-gradient(180deg,transparent 0%,#000 13%,#000 77%,transparent 100%);
+  mask-composite:intersect;
+}
+/* Feather in screen-space, not per moving snow texture. The chart's scene
+   ends at the footer, so soften both snow depths and their wash before it. */
+.hg-material-snow-envelope {
+  position:absolute;inset:0;pointer-events:none;
+  --hg-snow-feather:clamp(56px,10%,86px);
+  mask-image:linear-gradient(180deg,
+    #000 calc(100% - var(--hg-snow-feather)),
+    #000e calc(100% - var(--hg-snow-feather)*.71),
+    #0009 calc(100% - var(--hg-snow-feather)*.42),
+    #0003 calc(100% - var(--hg-snow-feather)*.20),
+    transparent calc(100% - 2px),transparent 100%);
+}
+/* Exact v3 original snow treatment, only reapplied when 大雪 is selected. */
+.hg-material-image,.hg-material-wash {position:absolute;display:block;pointer-events:none;user-select:none}
+.hg-material-image {max-width:none;object-fit:contain}
+.hg-material-wash {inset:0}
+.hg-material-snow-image {object-fit:contain;object-position:center bottom}
+.hg-material-snow-far {
+  width:108%;height:64%;right:-15%;bottom:7%;
+  filter:blur(.7px);
+  mask-image:radial-gradient(ellipse 76% 63% at 54% 93%,#000 24%,#000c 43%,#0004 70%,transparent 100%);
+}
+.hg-material-snow-near {
+  width:131%;height:68%;right:-22%;bottom:-4%;
+  mask-image:radial-gradient(ellipse 83% 66% at 47% 85%,#000 25%,#000e 45%,#000a 68%,transparent 100%);
+}
+.hg-material-snow-wash {
+  background:radial-gradient(ellipse 41% 70% at 100% 51%,#abbcd148 9%,#c6d5e629 27%,transparent 88%);
+}
+.hg-layout[data-hg-page="1"] .hg-material-snow-wash {
+  background:radial-gradient(ellipse 43% 77% at 100% 51%,#94b0ca41 4%,#afc6df21 33%,transparent 93%);
+}
+@media(max-width:690px),(max-aspect-ratio:1/1) {
+  .hg-material-spring-image{left:-14px;width:clamp(65px,17%,93px);top:37%}
+  .hg-material-grain-image{width:clamp(125px,39%,204px);right:-1.8%;bottom:.9%}
+  .hg-material-snow-far{width:169%;height:49%;right:-48%;bottom:9%}
+  .hg-material-snow-near{width:194%;height:61%;right:-52%;bottom:-1%}
+}
+/* Broad enough to read but still well outside the chart centre. The
+   photography sits below the original atlas/marks/foreground. */
+.hg-material-weather-backdrop{z-index:-1}
+.hg-material-rain-optics {
+  position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;
+}
+.hg-material-lens-frost {mask-composite:intersect}
+.hg-material-frost-side {
+  left:-1.7%;top:27%;width:clamp(63px,9%,116px);
+  mask-image:
+    radial-gradient(ellipse 99% 49% at 0% 52%,#000 19%,#000b 55%,#0005 78%,transparent 100%),
+    linear-gradient(90deg,#000 var(--hgw-frost-set),transparent calc(var(--hgw-frost-set) + 21%));
+}
+.hg-material-frost-sill {
+  left:3%;bottom:-2.8%;width:clamp(208px,48%,568px);
+  mask-image:
+    radial-gradient(ellipse 68% 105% at 33% 100%,#000 26%,#000b 53%,#0004 79%,transparent 100%),
+    linear-gradient(0deg,#000 var(--hgw-frost-set),transparent calc(var(--hgw-frost-set) + 19%)),
+    linear-gradient(90deg,transparent 0%,#000 12%,#000 77%,transparent 100%);
+}
+.hg-material-frost-corner {
+  right:-2.3%;bottom:-1.8%;width:clamp(150px,39%,490px);
+  mask-image:
+    radial-gradient(ellipse 76% 113% at 64% 100%,#000 30%,#000b 57%,transparent 100%),
+    linear-gradient(0deg,#000 var(--hgw-frost-set),transparent calc(var(--hgw-frost-set) + 20%)),
+    linear-gradient(90deg,transparent 0%,#000 23%,#000 83%,transparent 100%);
+}
+@media(max-width:690px),(max-aspect-ratio:1/1) {
+  .hg-material-frost-side{left:-2.9%;top:34%;width:clamp(50px,16%,79px)}
+  .hg-material-frost-sill{left:-1%;bottom:-1.7%;width:clamp(148px,59%,258px)}
+  .hg-material-frost-corner{right:-4%;bottom:-.9%;width:clamp(111px,47%,199px)}
+}

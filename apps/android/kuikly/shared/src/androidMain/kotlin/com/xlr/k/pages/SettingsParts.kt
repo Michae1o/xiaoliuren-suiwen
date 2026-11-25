@@ -453,6 +453,8 @@ internal fun SetBtn(
     enabled: Boolean = true,
     danger: Boolean = false,
     small: Boolean = false,
+    modifier: Modifier = Modifier,
+    keepDisabledDangerOutline: Boolean = false,
     onClick: () -> Unit,
 ) {
     var press by remember { mutableStateOf(false) }
@@ -472,7 +474,7 @@ internal fun SetBtn(
     )
     val lineA by animateFloatAsState(
         when {
-            !enabled -> 0.06f
+            !enabled -> if (danger && keepDisabledDangerOutline) 0.29f else 0.06f
             primary -> 0f
             press -> if (danger) 0.75f else 0.22f
             else -> if (danger) 0.55f else 0.12f
@@ -488,7 +490,7 @@ internal fun SetBtn(
        1.2dp 的 accent 描边（0.55，按下 0.85）+ accent 字 → 深浅皮肤都自带对比。 */
     val solidPrimary = primary
     Box(
-        modifier = Modifier
+        modifier = modifier
             .height(if (small) 30.dp else 34.dp)
             .clip(shape)
             .then(
