@@ -1,26 +1,35 @@
-遂问
-遂问小六壬软件
+遂问（遂问小六壬软件）
 
-Copyright 2026 洛神 IndieEcho
+判据体系：邵一尘 先生（道家小六壬 · 卜法卷）
+软件与工程实现：洛神 IndieEcho
+
+Copyright 2026 洛神 IndieEcho（软件代码、界面与工程实现）
+判据体系及其讲授内容，权利归 邵一尘 先生所有；本仓按原样引用并注明出处。
 
 本仓库为上述软件的公开源码，按 Apache License 2.0 授权使用。
 依该许可证第 4 条，任何分发本作品或其派生作品的行为，均须保留本 NOTICE
 文件的内容，或以等价方式保留其中的署名与来源信息。
 
-本项目由作者独立开发，包含以下原创内容：
+一、判据体系与师承
+
+  · 本软件的起卦、排盘、六宫断辞、体用、应期与事类速断，所依据的判据
+    体系出自 邵一尘 先生所传「道家小六壬」（卜法卷）。
+  · apps/shared-judgment/corpus/ 下九份体系文档，是这套讲授内容的整理；
+    应用内与语料中保留讲者署名、原文出处锚与讲者分级（见 README-判据.md）。
+  · 该部分内容的著作权归 邵一尘 先生所有。本仓库按原样引用，不改写其义，
+    也不以其名义作任何新的主张。
+
+二、本仓原创（代码与实现）
 
   · 起卦、排盘、六宫断辞的判据实现（apps/shared-judgment/）
-  · 判据语料与提示词（apps/shared-judgment/corpus/ 与 src/）
+  · 提示词的组织与各端数据生成（src/ 与 apps/android/scripts/）
   · 桌面端、安卓端、iOS 端的界面实现（apps/desktop-web/、apps/android/）
   · 构建链与上壳工具（tools/、apps/desktop-web/build/）
 
-第三方与出处说明：
+三、第三方
 
-  · 判据体系出自邵一尘先生所传「道家小六壬」（卜法卷）。应用内与语料中
-    保留讲者署名与分级，该部分内容的权利归原讲者所有，本仓库仅按原样
-    引用并注明出处。
   · apps/desktop-web/ 与 site/ 下的 vendor 目录为第三方库，各自遵循其
     原有许可证，不在本 NOTICE 的声明范围内。
 
 项目主页：https://fairy-deepdive.cn/guatai/
-作者：洛神（IndieEcho） https://space.bilibili.com/495284861
+作者（代码）：洛神（IndieEcho） https://space.bilibili.com/495284861
