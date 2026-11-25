@@ -120,7 +120,7 @@ cd ../desktop-shell && npx --yes @tauri-apps/cli@^2 build   # → exe / .app
 顺序别换：`make-doc-entry` 必须在 `vite build` 之前（它生成入口），`protect` 必须在 `prep` 之前。
 
 **安卓**：改完 `shared/` 或 `androidApp/` 里的代码，照上面那条 `gradlew` 重编就是新的。
-系统提示词是**生成**的（`node apps/android/scripts/gen-prompt.mjs` ← `apps/shared-judgment/src/prompt.js`），别手改 `PromptData.kt`。
+系统提示词是**生成**的（`node apps/android/scripts/gen-prompt.mjs` ← `apps/shared-judgment/src/prompt.js` 与 `followup.js`），别手改 `PromptData.kt`。
 
 **iOS**：改完 `shared/` 或 `iosApp/iosApp/*.swift`，推上去跑一次 workflow 就是新的。
 
