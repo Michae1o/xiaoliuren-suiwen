@@ -34,7 +34,7 @@ o.push('/* 内容来自 apps/shared-judgment/src/prompt.js；由 scripts/gen-pro
 o.push('')
 o.push('internal val SYS: String = ' + q(P.SYS))
 o.push('')
-o.push('/* 接着问（追问）的规矩：与桌面/小程序同一个真源 apps/shared-judgment/src/followup.js')
+o.push('/* 接着问（追问）的规矩：与桌面/安卓/iOS 同一个真源 apps/shared-judgment/src/followup.js')
 o.push('   ⛔ 端上不许再抄一份；要改口径只改那个 js，然后重跑本脚本。 */')
 o.push('internal val FOLLOW_HEAD: String = ' + q(FU.FOLLOW_HEAD))
 o.push('internal val FOLLOW_L_JUDGE: String = ' + q(FU.FOLLOW_LABEL.judge))

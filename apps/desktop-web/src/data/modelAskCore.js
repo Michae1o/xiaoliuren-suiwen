@@ -192,7 +192,7 @@ function plainCore(c, B) {
 
 /* L339–360 逐字（规格 v2 §5 补两处：判据整段放最前、当时的断辞别漏 —— 断辞取本次解卦落下的 window.__md） */
 function followupUser(c, B, thread, q) {
-  /* ★ 内容只有一份：包内 followup.js（桌面/安卓/iOS/小程序共用）。这里只负责喂料与清洗。 */
+  /* ★ 内容只有一份：包内 followup.js（桌面/安卓/iOS 共用）。这里只负责喂料与清洗。 */
   var th = (thread || []).map(function (it) {
     return { q: it.q, a: String(it.a || '').replace(/<[^>]+>/g, '') };
   });

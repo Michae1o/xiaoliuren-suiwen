@@ -143,7 +143,7 @@ corpus/00…08.md          九份体系文档（人读的真源）
 src/corpus.js            打包成代码读的形式
       ├─ src/judgment.js     六宫固定层 / 通用判据 / 应期 / 事类
       ├─ src/prompt.js       解卦用的系统提示词
-      ├─ src/followup.js     接着问（追问）的规矩与拼装 —— 桌面 / 安卓 / iOS / 小程序共用这一份
+      ├─ src/followup.js     接着问（追问）的规矩与拼装 —— 桌面 / 安卓 / iOS 共用这一份
       ├─ src/asks.js         本机速断的按问法素材
       └─ src/mcp-tools.js    MCP 工具表与执行（判据从这里取，不另存一份）
 ```

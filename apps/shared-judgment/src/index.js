@@ -7,6 +7,6 @@ export * from './plain-text.js';
 export * from './asks.js';     /* 按问法取用的判据素材（原文＋白话），同理只准存在包内 */
 export * from './tidy.js';      /* 断辞原文清洗（半角噪声收口）：两端共用同一份，2026-10-23 */
 export * from './prompt.js';   /* SYS（解卦系统提示词）：含判据特征串，只准存在包内 */
-export * from './followup.js';  /* 接着问：四端共用这一份规矩与拼装 */
+export * from './followup.js';  /* 接着问：三端共用这一份规矩与拼装 */
 export * from './corpus.js';    /* 查典素材（CORPUS / doc / sections）：MCP 的 xiaoliuren_chadian 用 */
 export * from './mcp-tools.js';  /* MCP 内核：工具表 + 执行 + 卦 id 会话（桌面桥与 mcp/ 服务共用这一份，2026-10-30） */
