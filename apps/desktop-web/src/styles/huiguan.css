@@ -70,7 +70,7 @@
 .hg-range button { padding-inline:12px; font-size:13px; opacity:.65; white-space:nowrap; }
 .hg-range button[aria-pressed="true"] { font-weight:700; opacity:1; }
 .hg-range button:hover,.hg-close:hover,.hg-direction:not([aria-disabled="true"]):hover { background:color-mix(in srgb,var(--hg-layout-ink) 10%,transparent); }
-.hg-close { justify-self:end; width:42px; display:grid; place-items:center; }
+.hg-close { flex:0 0 42px; width:42px; display:grid; place-items:center; }
 .hg-direction { display:inline-flex; gap:7px; align-items:center; justify-self:start; padding-inline:8px; font-size:13px; }
 .hg-direction:last-child { justify-self:end; }
 .hg-direction[aria-disabled="true"] { opacity:.36; cursor:default; }

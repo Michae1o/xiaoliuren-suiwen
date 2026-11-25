@@ -1,4 +1,5 @@
 package com.xlr.k.pages
+import com.tencent.kuikly.compose.foundation.layout.Arrangement
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberUpdatedState
@@ -32,6 +33,7 @@ import com.tencent.kuikly.compose.foundation.layout.fillMaxWidth
 import com.tencent.kuikly.compose.foundation.layout.height
 import com.tencent.kuikly.compose.foundation.layout.padding
 import com.tencent.kuikly.compose.foundation.clickable
+import com.tencent.kuikly.compose.foundation.gestures.detectTapGestures
 import com.tencent.kuikly.compose.foundation.layout.width
 import com.tencent.kuikly.compose.foundation.lazy.LazyColumn
 import com.tencent.kuikly.compose.foundation.lazy.items
@@ -427,7 +429,14 @@ internal fun AboutPage() {
             SetSecTitle("回观")
             Text_("按周或月回顾本机卦例。", fontSize = 11.5f, lineHeight = 18f, color = KY_DIM2)
             Spacer(Modifier.height(8.dp))
-            SetBtn("打开回观", primary = true) { RecallScreen.enterFromAbout() }
+            SetBtn("开始回观", primary = true) { RecallScreen.enterFromAbout() }
+            Spacer(Modifier.height(6.dp))
+            val systemRecall = Platform.recallSystemNotifications
+            Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text_("回观系统通知", modifier = Modifier.weight(1f), fontSize = 13f, weight = 500)
+                RecallNotificationSwitch(checked = systemRecall) { Platform.setRecallSystemNotifications?.invoke(it) }
+            }
+            Spacer(Modifier.height(6.dp))
             Spacer(Modifier.height(12.dp))
 
             /* ★ app 内更新（早期版本这一栏只有版本号 + 更新入口；简介/免责已搬「说明」栏） */
@@ -638,7 +647,24 @@ internal fun NotePage() {
    · 按下/拖动中旋钮放大 6%（120ms 非线性），松手回原尺寸。
    · 整行仍可点（父级 toggleable 管点击），拖动由这一层吃掉。 */
 @Composable
-internal fun GlassSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun RecallNotificationSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
+    val current by rememberUpdatedState(checked)
+    val change by rememberUpdatedState(onChange)
+    Box(
+        Modifier.size(48.dp, 48.dp)
+            .semantics {
+                role = Role.Switch
+                onClick(label = if (current) "关闭回观系统通知" else "开启回观系统通知") { change(!current); true }
+            }
+            .pointerInput(Unit) { detectTapGestures(onTap = { change(!current) }) },
+        contentAlignment = Alignment.CenterEnd,
+    ) {
+        GlassSwitch(checked = checked, confirmExternally = true, onChange = onChange)
+    }
+}
+
+@Composable
+internal fun GlassSwitch(checked: Boolean, confirmExternally: Boolean = false, onChange: (Boolean) -> Unit) {
     val trackW = 44.dp
     val trackH = 26.dp
     val padD = 3.dp
@@ -661,6 +687,7 @@ internal fun GlassSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
     // read the latest model/callback, not the checked value at first composition.
     val latestChecked by rememberUpdatedState(checked)
     val latestOnChange by rememberUpdatedState(onChange)
+    val latestConfirmExternally by rememberUpdatedState(confirmExternally)
 
     Box(
         modifier = Modifier
@@ -675,8 +702,13 @@ internal fun GlassSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
                     onDragEnd = {
                         dragging = false
                         val on = p.value >= 0.5f
-                        if (on != latestChecked) latestOnChange(on)
-                        else scope.launch { p.animateTo(if (on) 1f else 0f, tween(200, easing = KY_EASE_OUT)) }
+                        if (on != latestChecked) {
+                            latestOnChange(on)
+                            if (latestConfirmExternally) scope.launch {
+                                kotlinx.coroutines.delay(250)
+                                if (!dragging) p.animateTo(if (latestChecked) 1f else 0f, tween(200, easing = KY_EASE_OUT))
+                            }
+                        } else scope.launch { p.animateTo(if (on) 1f else 0f, tween(200, easing = KY_EASE_OUT)) }
                     },
                     onDragCancel = {
                         dragging = false

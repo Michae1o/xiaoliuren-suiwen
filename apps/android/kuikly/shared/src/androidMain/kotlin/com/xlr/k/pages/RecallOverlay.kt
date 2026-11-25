@@ -10,6 +10,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import com.tencent.kuikly.compose.animation.AnimatedVisibility
+import com.tencent.kuikly.compose.animation.fadeIn
+import com.tencent.kuikly.compose.animation.fadeOut
+import com.tencent.kuikly.compose.animation.slideInVertically
+import com.tencent.kuikly.compose.animation.slideOutVertically
 import com.tencent.kuikly.compose.animation.core.Animatable
 import com.tencent.kuikly.compose.animation.core.tween
 import com.tencent.kuikly.compose.foundation.Canvas
@@ -90,7 +95,24 @@ private val paper = Color(0xFFF4F1E8)
 /** Read-only local report, with no model request. */
 @Composable
 internal fun RecallOverlay() {
-    if (!RecallScreen.open) return
+    val reducedMotion = Build.VERSION.SDK_INT >= 26 && !ValueAnimator.areAnimatorsEnabled()
+    if (reducedMotion) {
+        if (RecallScreen.open) RecallOverlayContent()
+        return
+    }
+    AnimatedVisibility(
+        visible = RecallScreen.open,
+        enter = fadeIn(tween(275, easing = KY_EASE_OUT)) +
+            slideInVertically(tween(305, easing = KY_EASE_OUT)) { it / 30 },
+        exit = fadeOut(tween(210, easing = KY_EASE_IN)) +
+            slideOutVertically(tween(235, easing = KY_EASE_IN)) { it / 40 },
+    ) {
+        RecallOverlayContent()
+    }
+}
+
+@Composable
+private fun RecallOverlayContent() {
     DisposableEffect(Unit) {
         val update = Platform.setRecallStatusBackdrop
         update?.invoke(true)
@@ -183,8 +205,8 @@ internal fun RecallOverlay() {
                         .border(.7.dp, paper.copy(alpha = .13f), RoundedCornerShape(22.dp)),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    RecallChoice(if (target?.monthly == false) "上周" else "本周", !month, ink) { month = false }
-                    RecallChoice(if (target?.monthly == true) "上月" else "本月", month, ink) { month = true }
+                    RecallChoice(target?.takeIf { !it.monthly }?.label(today) ?: "本周", !month, ink) { month = false }
+                    RecallChoice(target?.takeIf { it.monthly }?.label(today) ?: "本月", month, ink) { month = true }
                 }
             }
             Text_(

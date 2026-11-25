@@ -1,5 +1,9 @@
 package com.xlr.k.pages
 
+import com.tencent.kuikly.compose.ui.semantics.selected
+import com.tencent.kuikly.compose.ui.semantics.clearAndSetSemantics
+import com.tencent.kuikly.compose.foundation.Image
+import com.tencent.kuikly.compose.coil3.rememberAsyncImagePainter
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.LaunchedEffect
@@ -11,6 +15,9 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import com.tencent.kuikly.compose.ui.layout.onSizeChanged
 import com.tencent.kuikly.compose.ui.semantics.Role
+import com.tencent.kuikly.compose.ui.semantics.semantics
+import com.tencent.kuikly.compose.ui.semantics.role
+import com.tencent.kuikly.compose.ui.semantics.onClick
 import com.tencent.kuikly.compose.foundation.selection.toggleable
 import com.tencent.kuikly.compose.foundation.Canvas
 import com.tencent.kuikly.compose.foundation.background
@@ -25,6 +32,7 @@ import com.tencent.kuikly.compose.foundation.layout.fillMaxWidth
 import com.tencent.kuikly.compose.foundation.layout.height
 import com.tencent.kuikly.compose.foundation.layout.padding
 import com.tencent.kuikly.compose.foundation.clickable
+import com.tencent.kuikly.compose.foundation.gestures.detectTapGestures
 import com.tencent.kuikly.compose.foundation.layout.width
 import com.tencent.kuikly.compose.foundation.lazy.LazyColumn
 import com.tencent.kuikly.compose.foundation.lazy.items
@@ -57,54 +65,7 @@ import com.tencent.kuikly.core.views.SwitchView
 internal fun SkinPage() {
     LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
         item {
-            /* 此前：原来那两句「点一下立刻生效…」「浅色九套都在这儿…」删掉 ——
-               皮肤格自己看得懂，说明字反而占屏、还把第一屏的卡压下去 */
-            /* 明暗：照早期版本 #btnDN 的口径 —— 切到夜就是切到深色那套（黑夜 / 莫高窟），点亮则回上次的浅色套 */
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(veil(0.42f))
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text_(text = "日夜", fontSize = 13f, lineHeight = 21f, weight = 500)
-                    Text_(
-                        text = if (Skin.dark) "现在是深色（" + Skin.def.name + "）" else "现在是浅色（" + Skin.def.name + "）",
-                        fontSize = 11f,
-                        lineHeight = 18f,
-                        color = KY_DIM2,
-                    )
-                }
-                SetBtn(label = if (Skin.dark) "切到白天" else "切到黑夜", small = true) { Skin.toggleDayNight() }
-            }
-
-            Column(
-                Modifier.fillMaxWidth().padding(bottom = 12.dp)
-                    .clip(RoundedCornerShape(12.dp)).background(veil(0.42f))
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-            ) {
-                Text_("背景雾气", fontSize = 13f, lineHeight = 21f, weight = 500)
-                Spacer(Modifier.height(10.dp))
-                FogLevelControl()
-                Spacer(Modifier.height(8.dp))
-                val hint = when {
-                    Skin.cur == "bru" -> "卡通保持清爽底色，不叠加雾气。"
-                    Skin.fogLevel == 0 -> "淡雾静置，减少动态消耗。"
-                    Skin.fogLevel == 1 -> "雾气沿平滑路径缓缓游移。"
-                    !realtimeFogAvailable() -> "当前系统使用轻柔流动，实时流雾需要 Android 13 或以上。"
-                    else -> "雾形持续变化、交织流动。"
-                }
-                Text_(hint, fontSize = 11f, lineHeight = 18f, color = KY_DIM2)
-                if (Skin.fogLevel > 0 && Skin.cur != "bru") {
-                    Spacer(Modifier.height(12.dp))
-                    Box(Modifier.fillMaxWidth().height(0.5.dp).background(KY_LINE))
-                    FogFreezeControl()
-                }
-            }
-
+            SetSecTitle("主题", top = 0)
             var i = 0
             while (i < SKINS.size) {
                 val a = SKINS[i]
@@ -118,41 +79,94 @@ internal fun SkinPage() {
                 }
                 i += 2
             }
+
+            Spacer(Modifier.height(10.dp))
+            SetSecTitle("显示", top = 0)
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                    .background(veil(0.42f)).border(Skin.borderW, KY_LINE, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text_("日夜", fontSize = 13f, lineHeight = 20f, weight = 600)
+                        Text_(if (Skin.dark) "深色 · " + Skin.def.name else "浅色 · " + Skin.def.name,
+                            fontSize = 11f, lineHeight = 17f, color = KY_DIM2)
+                    }
+                    SetBtn(if (Skin.dark) "切到白天" else "切到黑夜", small = true) { Skin.toggleDayNight() }
+                }
+                Spacer(Modifier.height(12.dp))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(KY_LINE))
+                Spacer(Modifier.height(12.dp))
+                Text_("背景雾气", fontSize = 13f, lineHeight = 20f, weight = 600)
+                Spacer(Modifier.height(8.dp))
+                FogLevelControl()
+                Spacer(Modifier.height(6.dp))
+                val hint = when {
+                    Skin.cur == "bru" -> "卡通保持清爽底色，不叠加雾气。"
+                    Skin.fogLevel == 0 -> "淡雾静置，减少动态消耗。"
+                    Skin.fogLevel == 1 -> "雾气沿平滑路径缓缓游移。"
+                    !realtimeFogAvailable() -> "当前设备使用轻柔流动。"
+                    else -> "雾形持续变化、交织流动。"
+                }
+                Text_(hint, fontSize = 11f, lineHeight = 17f, color = KY_DIM2)
+                if (Skin.fogLevel > 0 && Skin.cur != "bru") {
+                    Spacer(Modifier.height(12.dp))
+                    Box(Modifier.fillMaxWidth().height(0.5.dp).background(KY_LINE))
+                    FogFreezeControl()
+                }
+            }
             Spacer(modifier = Modifier.height(30.dp))
         }
     }
 }
 
-/** 一格皮肤：底色当小块、强调色当点，名字 + 副标题照早期版本清单 */
+/** 用真实主题色与该套北斗素材画一个静态预览，不启动开屏动画。 */
 @Composable
 private fun SkinTile(d: SkinDef) {
     val on = d.key == Skin.cur
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (on) KY_ACCENT_BG else veil(0.42f))
-            .border(Skin.borderW, if (on) KY_ACCENT_LINE else KY_LINE, RoundedCornerShape(12.dp))
-            .tapNoIndication { Skin.apply(d.key) }
-            .padding(horizontal = 12.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    val corner = RoundedCornerShape(12.dp)
+    Column(
+        Modifier.fillMaxWidth().clip(corner)
+            .background(veil(0.42f))
+            .semantics(mergeDescendants = true) {
+                role = Role.RadioButton
+                selected = on
+                onClick { Skin.apply(d.key); true }
+            }
+            .tapNoIndication { Skin.apply(d.key) },
     ) {
-        /* 小样：迷你卡（底色 / 卡 / 主色三件） */
-        SkinSwatch(d, w = 22.dp, h = 26.dp)
-        Spacer(modifier = Modifier.width(10.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            /* ⚠ 文字用**当前皮肤**的墨色（不是被预览那套的 ink）——否则在深色卡上，
-               深色皮肤的深墨名字会看不见（敦煌在黑夜底上就是一片灰） */
-            Text_(
-                text = d.name,
-                fontSize = 13f,
-                lineHeight = 20f,
-                weight = if (on) 600 else 500,
-                color = if (on) KY_ACCENT else KY_INK,
+        Box(Modifier.fillMaxWidth().height(59.dp).background(d.bg)) {
+            Column(Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 9.dp)) {
+                Box(Modifier.width(23.dp).height(2.dp).background(d.accent))
+                Spacer(Modifier.height(7.dp))
+                Column(Modifier.width(54.dp).height(31.dp).clip(RoundedCornerShape(5.dp))
+                    .background(d.surface).border(0.5.dp, d.line2, RoundedCornerShape(5.dp))
+                    .padding(horizontal = 6.dp, vertical = 6.dp)) {
+                    Box(Modifier.width(14.dp).height(2.dp).background(d.ink))
+                    Spacer(Modifier.height(5.dp))
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(d.line2))
+                }
+            }
+            Image(
+                painter = rememberAsyncImagePainter("assets://splash-orbit/${d.key}/north.png"),
+                contentDescription = null,
+                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 6.dp).size(61.dp, 48.dp),
             )
-            Text_(text = d.tag, fontSize = 10.5f, lineHeight = 17f, color = KY_DIM2)
         }
-        if (on) Text_(text = "当前", fontSize = 11f, lineHeight = 18f, color = KY_ACCENT)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text_(d.name, fontSize = 13f, lineHeight = 19f, weight = 600)
+                Text_(d.tag, fontSize = 10.5f, lineHeight = 15f, color = KY_DIM2)
+            }
+            if (on) {
+                Box(Modifier.size(19.dp).clip(RoundedCornerShape(10.dp)).background(KY_ACCENT_BG).clearAndSetSemantics { },
+                    contentAlignment = Alignment.Center) {
+                    Text_("✓", fontSize = 12f, lineHeight = 16f, weight = 700, color = KY_ACCENT)
+                }
+            }
+        }
     }
 }
 
@@ -371,6 +385,7 @@ private fun SetDataRow(
 /* ---------------- 关于 ---------------- */
 @Composable
 internal fun AboutPage() {
+    LaunchedEffect(Unit) { IosRecall.querySystemNotifications() }
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf("") }
@@ -401,7 +416,12 @@ internal fun AboutPage() {
                     Text_(text = "查看本周或本月卦例，仅在本机汇总。", fontSize = 11.5f,
                         lineHeight = 18f, color = KY_DIM)
                 }
-                SetBtn(label = "打开回观", onClick = { IosRecall.openAbout() })
+                SetBtn(label = "开始回观", onClick = { IosRecall.openAbout() })
+            }
+
+            Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text_("回观系统通知", modifier = Modifier.weight(1f), fontSize = 13f, weight = 500)
+                RecallNotificationSwitch(checked = IosRecall.systemNotificationsEnabled) { IosRecall.setSystemNotifications(it) }
             }
 
             /* ★ app 内更新（早期版本这一栏只有版本号 + 更新入口；简介/免责已搬「说明」栏） */
@@ -583,7 +603,24 @@ internal fun NotePage() {
    · 按下/拖动中旋钮放大 6%（120ms 非线性），松手回原尺寸。
    · 整行仍可点（父级 toggleable 管点击），拖动由这一层吃掉。 */
 @Composable
-internal fun GlassSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun RecallNotificationSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
+    val current by rememberUpdatedState(checked)
+    val change by rememberUpdatedState(onChange)
+    Box(
+        Modifier.size(48.dp, 48.dp)
+            .semantics {
+                role = Role.Switch
+                onClick(label = if (current) "关闭回观系统通知" else "开启回观系统通知") { change(!current); true }
+            }
+            .pointerInput(Unit) { detectTapGestures(onTap = { change(!current) }) },
+        contentAlignment = Alignment.CenterEnd,
+    ) {
+        GlassSwitch(checked = checked, confirmExternally = true, onChange = onChange)
+    }
+}
+
+@Composable
+internal fun GlassSwitch(checked: Boolean, confirmExternally: Boolean = false, onChange: (Boolean) -> Unit) {
     val trackW = 44.dp
     val trackH = 26.dp
     val padD = 3.dp
@@ -606,6 +643,7 @@ internal fun GlassSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
     // read the latest model/callback, not the checked value at first composition.
     val latestChecked by rememberUpdatedState(checked)
     val latestOnChange by rememberUpdatedState(onChange)
+    val latestConfirmExternally by rememberUpdatedState(confirmExternally)
 
     Box(
         modifier = Modifier
@@ -620,8 +658,13 @@ internal fun GlassSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
                     onDragEnd = {
                         dragging = false
                         val on = p.value >= 0.5f
-                        if (on != latestChecked) latestOnChange(on)
-                        else scope.launch { p.animateTo(if (on) 1f else 0f, tween(200, easing = KY_EASE_OUT)) }
+                        if (on != latestChecked) {
+                            latestOnChange(on)
+                            if (latestConfirmExternally) scope.launch {
+                                kotlinx.coroutines.delay(250)
+                                if (!dragging) p.animateTo(if (latestChecked) 1f else 0f, tween(200, easing = KY_EASE_OUT))
+                            }
+                        } else scope.launch { p.animateTo(if (on) 1f else 0f, tween(200, easing = KY_EASE_OUT)) }
                     },
                     onDragCancel = {
                         dragging = false

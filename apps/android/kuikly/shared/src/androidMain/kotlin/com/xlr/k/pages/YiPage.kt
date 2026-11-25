@@ -154,8 +154,6 @@ internal fun AuraLayer() {
 @Composable
 internal fun YiContent(
     onCast: () -> Unit,
-    recallReminder: RecallReminderPeriod?,
-    dismissRecallReminder: () -> Unit,
 ) {
     /* （第一轮红框）：底部 71dp 是给手势条/留白用的，键盘一上来就该收成 12dp。
        ★ 第二轮：详情展开时「键盘高 − 详情高」那截要落在**页面自己的留白**里
@@ -224,9 +222,7 @@ internal fun YiContent(
                 }
             }
         }
-        // Use the pre-existing 36 dp gap so the reminder never moves or covers the ask card.
-        if (recallReminder == null) Spacer(Modifier.height(36.dp))
-        else RecallReminderBanner(recallReminder, dismissRecallReminder)
+        Spacer(Modifier.height(36.dp))
         AskCard(onCast)
     }
 }

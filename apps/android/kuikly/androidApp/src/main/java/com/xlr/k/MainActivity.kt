@@ -33,6 +33,10 @@ class MainActivity : AppCompatActivity() {
         setupAdapters()
         com.xlr.k.LlmHost.install(applicationContext)
         com.xlr.k.LlmHost.activity = this
+        com.xlr.k.pages.Platform.setRecallSystemNotifications = { value ->
+            runOnUiThread { if (!isFinishing && !isDestroyed) RecallSystemReminder.setEnabled(this, value) }
+        }
+        syncRecallNotificationSwitch()
         com.xlr.k.UpdHost.install(applicationContext)
         /* ★
            皮肤原先在 RootPage 组合里才 Skin.load()，第一帧已经用默认的 bw 画完了，
@@ -169,6 +173,8 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         com.xlr.k.pages.setRecallReminderForeground(true)
+        RecallSystemReminder.refresh(this)
+        syncRecallNotificationSwitch()
         if (::delegator.isInitialized) delegator.onResume()
     }
 
@@ -180,7 +186,20 @@ class MainActivity : AppCompatActivity() {
         com.xlr.k.BackupHost.flush()
     }
 
+    internal fun syncRecallNotificationSwitch() {
+        com.xlr.k.pages.Platform.recallSystemNotifications = RecallSystemReminder.isActive(this)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, results: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, results)
+        if (requestCode == RecallSystemReminder.PERMISSION_REQUEST) {
+            RecallSystemReminder.refresh(this)
+            syncRecallNotificationSwitch()
+        }
+    }
+
     override fun onDestroy() {
+        if (com.xlr.k.LlmHost.activity === this) com.xlr.k.pages.Platform.setRecallSystemNotifications = null
         if (com.xlr.k.pages.Platform.setRecallStatusBackdrop === recallStatusBar) {
             setRecallStatusBar(false)
             com.xlr.k.pages.Platform.setRecallStatusBackdrop = null

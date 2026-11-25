@@ -50,10 +50,12 @@ internal fun iosRecallLens(summary: RecallSummary, monthly: Boolean, prior: Bool
 }
 
 internal object IosRecall {
-    private data class Offer(val period: RecallReminderPeriod, val total: Int) {
+    private data class Offer(val period: RecallReminderPeriod) {
         val key: String get() = "${reportKey(period.monthly)}:${period.anchor}"
     }
 
+    var systemNotificationsEnabled by mutableStateOf(false)
+        private set
     var foreground by mutableStateOf(false)
         private set
     var nativeBlocked by mutableStateOf(true)
@@ -86,6 +88,7 @@ internal object IosRecall {
                 else -> null
             }
             when (info["action"]?.toString()) {
+                "systemNotificationsState" -> active()?.let { systemNotificationsEnabled = it }
                 "ready" -> {
                     nativeReady = true
                     openPayload?.let(::publish)
@@ -113,31 +116,29 @@ internal object IosRecall {
     private fun seenKey(monthly: Boolean) =
         if (monthly) "recall.reminder.month.shown" else "recall.reminder.week.shown"
 
-    fun localToday() = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+    fun localNow() = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
     private fun lastShown(monthly: Boolean): LocalDate? =
         Platform.get?.invoke(seenKey(monthly))?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
 
     private fun rememberShown(offer: Offer) {
-        shownOn = localToday()
+        shownOn = localNow().date
         val p = offer.period
         if (lastShown(p.monthly)?.let { it < p.anchor } != false)
             Platform.put?.invoke(seenKey(p.monthly), p.anchor.toString())
     }
 
-    fun updateOffer(today: LocalDate) {
+    fun updateOffer(now: LocalDateTime) {
         if (!canOffer() || Platform.get == null || Platform.put == null) return
         offered?.let { current ->
-            // Don't leave a previous period's card up after a calendar rollover.
-            val nowStart = buildRecallSummary(emptyList(), today, current.period.monthly).start
-            if (current.period.anchor.toEpochDays() == nowStart.toEpochDays() - 1) return
+            if (current.period.covers(now)) return
             hideOffer()
         }
-        if (shownOn == today) return
+        if (shownOn == now.date) return
         val rows = RecStore.loadRaw()
-        val period = pendingRecallReminder(rows, today, lastShown(false), lastShown(true)) ?: return
+        val period = pendingRecallReminder(rows, now, lastShown(false), lastShown(true)) ?: return
         val summary = buildRecallSummary(rows, period.anchor, period.monthly)
         if (summary.total == 0) return
-        val next = Offer(period, summary.total)
+        val next = Offer(period)
         offered = next
         publishOffer(next)
     }
@@ -148,9 +149,45 @@ internal object IosRecall {
         publish("""{"kind":"clearReminder"}""")
     }
 
-    private fun publishOffer(offer: Offer) = publish(
-        """{"kind":"reminder","key":${wire(offer.key)},"active":${wire(reportKey(offer.period.monthly))},"title":${wire(offer.period.label + "回观")},"message":${wire("${offer.total} 则卦例")}}""",
-    )
+    private fun publishOffer(offer: Offer) {
+        val p = offer.period
+        val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+        val title = p.label(today) + "回观"
+        val summary = buildRecallSummary(RecStore.loadRaw(), p.anchor, p.monthly)
+        val start = summary.start
+        val end = summary.endInclusive
+        val range = if (p.monthly) "${p.anchor.monthNumber} 月"
+            else if (start.monthNumber == end.monthNumber) "${start.monthNumber} 月 ${start.dayOfMonth}–${end.dayOfMonth} 日"
+            else "${start.monthNumber}/${start.dayOfMonth}–${end.monthNumber}/${end.dayOfMonth}"
+        val subtitle = "$range · ${summary.total} 则卦例"
+        // Derive an opaque shade from the actual page palette, not from the window backdrop.
+        val bg = KY_BG
+        val surface = KY_SURFACE
+        val ink = KY_INK
+        val amount = if (Skin.dark) .15f else .085f
+        fun channel(background: Float, panel: Float, primary: Float): String {
+            val paper = background + (panel - background) * .28f
+            val value = ((paper + (primary - paper) * amount) * 255 + .5f).toInt().coerceIn(0, 255)
+            return value.toString(16).padStart(2, '0')
+        }
+        val face = "#" + channel(bg.red, surface.red, ink.red) + channel(bg.green, surface.green, ink.green) +
+            channel(bg.blue, surface.blue, ink.blue)
+        publish(
+            """{"kind":"reminder","key":${wire(offer.key)},"active":${wire(reportKey(offer.period.monthly))},"title":${wire(title)},"message":${wire(subtitle)},"face":${wire(face)},"offerMs":$RECALL_OFFER_MS,"hintMs":$RECALL_HINT_MS}""",
+        )
+    }
+
+    @OptIn(ExperimentalForeignApi::class)
+    fun querySystemNotifications() {
+        NSNotificationCenter.defaultCenter.postNotificationName("xlrRecallSystemQuery", null, emptyMap<Any?, Any?>())
+    }
+
+    @OptIn(ExperimentalForeignApi::class)
+    fun setSystemNotifications(enabled: Boolean) {
+        NSNotificationCenter.defaultCenter.postNotificationName(
+            "xlrRecallSystemToggle", null, mapOf<Any?, Any?>("enabled" to enabled),
+        )
+    }
 
     fun openAbout() {
         val instant = Clock.System.now()
@@ -168,7 +205,7 @@ internal object IosRecall {
         if (summary.total == 0) { hideOffer(); return }
         val at = LocalDateTime(p.anchor.year, p.anchor.monthNumber, p.anchor.dayOfMonth, 12, 0)
             .toInstant(TimeZone.currentSystemDefault())
-        open("reminder", reportKey(p.monthly), listOf(iosRecallLens(summary, p.monthly, true, at)))
+        open("reminder", reportKey(p.monthly), listOf(iosRecallLens(summary, p.monthly, localNow().date > p.anchor, at)))
     }
 
     private fun open(source: String, key: String, lenses: List<String>) {
@@ -215,13 +252,8 @@ internal fun IosRecallIdleGate(composeEligible: Boolean) {
         }
         // Wait for overlay exit motions, then only check while home is idle.
         delay(420)
-        var checked: LocalDate? = null
         while (true) {
-            val today = IosRecall.localToday()
-            if (checked != today) {
-                checked = today
-                IosRecall.updateOffer(today)
-            }
+            IosRecall.updateOffer(IosRecall.localNow())
             delay(30_000)
         }
     }

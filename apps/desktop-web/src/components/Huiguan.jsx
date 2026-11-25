@@ -87,7 +87,8 @@ export default function Huiguan({ records, now, seasonDate = now, prior = null, 
   const shade = useTransform(progress, [0,.16,1,1.16,2], [0,0,1,1,0]);
   const afterglow = useTransform(progress, [0,1.12,1.9,2], [0,0,1,1]);
   const stats = useMemo(() => summarizeHuiguan(records, prior?.anchor ?? now, range), [records, now, range, prior]);
-  const season = useMemo(() => range === 'month' ? getHuiguanSeason(seasonDate) : null, [seasonDate, range]);
+  const seasonAnchor = prior?.anchor ?? seasonDate;
+  const season = useMemo(() => range === 'month' ? getHuiguanSeason(seasonAnchor) : null, [seasonAnchor, range]);
   const material = getHuiguanMaterial(season);
   const studies = material === 'thunder' || material === 'ripples' || material === 'canopy' || material === 'grainfill';
   const SeasonArt = renderers[getHuiguanMaterialRenderer(material)];
@@ -206,7 +207,12 @@ export default function Huiguan({ records, now, seasonDate = now, prior = null, 
       {studies && <HuiguanSeasonStudies key={material} type={material} timeline={progress} reduced={!!reduced}/>}
       {SeasonArt && <SeasonArt key={material} name={material} timeline={progress} reduced={!!reduced}/>}
       <header className="hg-header">
-        <div className="hg-title-block"><h2 id="hg-title">回观</h2>
+        <div className="hg-title-block">
+          <button type="button" className="hg-close" data-huiguan-close aria-label="返回" title="返回" ref={close} onClick={requestClose}>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
+              strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18.5 12h-13m0 0 5-5m-5 5 5 5" /></svg>
+          </button>
+          <h2 id="hg-title">回观</h2>
           <details className="hg-sources"><summary aria-label="星图资料">ⓘ</summary>
             <div><b>二十八宿主星官选图</b>
               <p>据宋代星官复原绘制，星位回推至约 1052 年。选绘二十八宿主星官、三垣藩墙、北极星官和北斗，不是实时天象。</p>
@@ -217,15 +223,11 @@ export default function Huiguan({ records, now, seasonDate = now, prior = null, 
             </div>
           </details>
         </div>
-        {prior ? <span className="hg-period-label">{range === 'month' ? '上月' : '上周'}</span> :
+        {prior ? <span className="hg-period-label">{(now > prior.anchor && day(now) !== day(prior.anchor) ? '上' : '本') + (range === 'month' ? '月' : '周')}</span> :
           <div className="hg-range" role="group" aria-label="统计时段">
             <button type="button" aria-pressed={range === 'week'} onClick={() => setRange('week')}>本周</button>
             <button type="button" aria-pressed={range === 'month'} onClick={() => setRange('month')}>本月</button>
           </div>}
-        <button type="button" className="hg-close" data-huiguan-close aria-label="关闭回观" ref={close} onClick={requestClose}>
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4"
-            strokeLinecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
-        </button>
       </header>
       <div className={'hg-viewport' + (dragging ? ' is-dragging' : '')} onPointerDown={(e) => {
         if (!e.isPrimary || e.button !== 0) return;

@@ -69,6 +69,14 @@ struct ContentView: View {
     private enum RecallExit: Equatable { case native, bridgeAlreadyClosed }
     @State private var recallReminder: RecallReminderNotice?
     @State private var recallAskHeight: CGFloat = 0
+    // ⛔ 这里不能用 @AppStorage：它会在 SwiftUI 里注册 UserDefaultObserver，
+    //   而 Kotlin 侧（雾相位 K_FOG_PHASE_*、皮肤、开关等）是在 Kuikly 渲染线程写 UserDefaults 的
+    //   ⇒ 那次写入会在**渲染线程**上回调 SwiftUI 的 UpdateGroup.enqueueAction，去抢 MovableLock，
+    //   与主线程「等 render flush」形成死锁，启动被看门狗按 0x8BADF00D 杀掉
+    //   （敦煌皮肤：fogLevel=1 会周期性存雾相位，正好撞上）。
+    //   判定仍以 Kotlin 侧那个键为准，Swift 只用一个普通 @State 承接。
+    @State private var recallSystemNotifications: Bool =
+        UserDefaults.standard.bool(forKey: "xlr.recallSystemNotifications")
 
     private var recallReminderBlocked: Bool {
         recallScenePhase != .active || !askShown || !ask.ready || ask.moreOpen || kbShift > 0 ||
@@ -109,11 +117,14 @@ struct ContentView: View {
                     // the measured ask stack includes greeting, growing draft and any error.
                     if recallAskHeight > 0 && geo.size.height - 71 - recallAskHeight >= 150 {
                         NativeRecallReminder(item: item,
+                            ink: ask.ink, dim: ask.dim, accent: ask.accent,
+                            surface: ask.surface, dark: isDarkTheme,
                             acknowledge: { NativeRecallBridge.send("reminderShown", key: item.id) },
                             open: { NativeRecallBridge.send("openReminder", key: item.id) },
                             dismiss: { NativeRecallBridge.send("dismissReminder", key: item.id) })
                             .id(item.id)
-                            .padding(.horizontal, 22)
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 16)
                             .padding(.top, 96)
                     }
                 }
@@ -167,12 +178,15 @@ struct ContentView: View {
         }
         .onChange(of: recallScenePhase) { phase in
             // Control Center/temporary inactivity is not a fresh foreground visit.
-            if phase == .active { NativeRecallBridge.send("foreground", active: true) }
+            if phase == .active {
+                NativeRecallBridge.send("foreground", active: true)
+            }
             if phase == .background { NativeRecallBridge.send("foreground", active: false) }
         }
         .onChange(of: recallReminderBlocked) { blocked in
             NativeRecallBridge.send("visibility", active: blocked)
         }
+        .modifier(RecallSystemControls(enabled: $recallSystemNotifications))
     }
 
     private var mainSurface: some View {

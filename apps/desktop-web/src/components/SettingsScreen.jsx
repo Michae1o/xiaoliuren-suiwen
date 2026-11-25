@@ -1150,7 +1150,7 @@ export default function SettingsScreen({ open, onClose, preload, onHuiguan }) {
               {onHuiguan && <div className="datarow"><div className="m"><b>回观</b>
                 <p>查看本周或本月的卦例统计，仅在本机汇总。</p></div>
                 <button className="sbtn" type="button" id="stHuiguan" aria-haspopup="dialog"
-                  onClick={e => onHuiguan(e.currentTarget)}>打开回观</button>
+                  onClick={e => onHuiguan(e.currentTarget)}>开始回观</button>
               </div>}
               {/* ★ （app 内更新·桌面档 B）：下好整包 → 换装 → 自己重启。
                   只在桌面 exe 里出现（网页版没有 __TAURI__，也不能替换自己的文件 ⇒ 不显示这一行）。 */}

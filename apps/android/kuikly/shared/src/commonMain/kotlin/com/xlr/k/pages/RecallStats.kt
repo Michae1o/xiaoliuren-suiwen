@@ -1,6 +1,7 @@
 package com.xlr.k.pages
 
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 
 internal data class RecallCategory(val label: String, val count: Int)
 internal data class RecallMark(val day: Int, val category: String, val noted: Boolean)
@@ -20,25 +21,35 @@ internal data class RecallSummary(
 private val recallDatePattern = Regex("""^\d{4}-\d{2}-\d{2}(?=$|[ T])""")
 private fun LocalDate.step(days: Int) = LocalDate.fromEpochDays(toEpochDays() + days)
 
-/** Anchor the report on the final day of the completed local calendar period. */
+internal const val RECALL_OFFER_MS = 8_000
+internal const val RECALL_HINT_MS = 5_200
+
+/** Local period closed by the reminder, pinned across midnight. */
 internal data class RecallReminderPeriod(val anchor: LocalDate, val monthly: Boolean) {
-    val label: String get() = if (monthly) "上月" else "上周"
+    fun covers(now: LocalDateTime): Boolean =
+        (now.date == anchor && now.hour >= 21) || now.date == anchor.step(1)
+    fun label(on: LocalDate): String = (if (on > anchor) "上" else "本") + if (monthly) "月" else "周"
+}
+
+internal fun recallReminderWindow(now: LocalDateTime, monthly: Boolean): RecallReminderPeriod? {
+    val date = now.date
+    val start = if (monthly) LocalDate(date.year, date.monthNumber, 1) else date.step(-date.dayOfWeek.ordinal)
+    val next = if (!monthly) start.step(7)
+        else if (date.monthNumber == 12) LocalDate(date.year + 1, 1, 1)
+        else LocalDate(date.year, date.monthNumber + 1, 1)
+    val target = if (date == start) start.step(-1) else next.step(-1)
+    return RecallReminderPeriod(target, monthly).takeIf { it.covers(now) }
 }
 
 internal fun pendingRecallReminder(
     rows: List<Map<String, String>>,
-    today: LocalDate,
+    now: LocalDateTime,
     lastWeekShown: LocalDate?,
     lastMonthShown: LocalDate?,
-): RecallReminderPeriod? {
-    val lastMonth = LocalDate(today.year, today.monthNumber, 1).step(-1)
-    val lastWeek = today.step(-today.dayOfWeek.ordinal - 1)
-    // Month first; at most one result, no scanning backwards through historical periods.
-    if ((lastMonthShown == null || lastMonthShown < lastMonth) && buildRecallSummary(rows, lastMonth, monthly = true).total > 0)
-        return RecallReminderPeriod(lastMonth, monthly = true)
-    if ((lastWeekShown == null || lastWeekShown < lastWeek) && buildRecallSummary(rows, lastWeek, monthly = false).total > 0)
-        return RecallReminderPeriod(lastWeek, monthly = false)
-    return null
+): RecallReminderPeriod? = listOf(true, false).firstNotNullOfOrNull { monthly ->
+    val period = recallReminderWindow(now, monthly) ?: return@firstNotNullOfOrNull null
+    val seen = if (monthly) lastMonthShown else lastWeekShown
+    period.takeIf { (seen == null || seen < it.anchor) && buildRecallSummary(rows, it.anchor, monthly).total > 0 }
 }
 
 /** Matches desktop V7 huiguanStats.js (blob a40772a). This is a local read-only report, not another divination path. */

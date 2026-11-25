@@ -2,6 +2,7 @@ package com.xlr.k.pages
 
 import kotlinx.coroutines.Dispatchers
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -12,6 +13,8 @@ import kotlinx.coroutines.withContext
 
 /** 宿主注入的三件事：读配置 / 写配置 / 发一次 chat（返回助手正文，出错抛异常） */
 object Platform {
+    var recallSystemNotifications by mutableStateOf(false)
+    var setRecallSystemNotifications: ((Boolean) -> Unit)? = null
     var get: ((String) -> String?)? = null
     var put: ((String, String) -> Unit)? = null
     var chat: ((String, Map<String, String>, String) -> String)? = null

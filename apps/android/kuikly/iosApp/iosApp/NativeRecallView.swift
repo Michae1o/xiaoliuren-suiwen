@@ -462,49 +462,115 @@ struct NativeRecallView: View {
 
 struct NativeRecallReminder: View {
     let item: RecallReminderNotice
+    let ink, dim, accent, surface: Color
+    let dark: Bool
     let acknowledge: () -> Void
     let open: () -> Void
     let dismiss: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hint = false
+    @State private var progress: CGFloat = 1
+    @State private var presented = false
+    @State private var closing = false
+
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
         HStack(spacing: 0) {
-            Button(action: open) {
-                HStack(spacing: 8) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(item.title).font(.caption.weight(.semibold)).lineLimit(1)
-                        if !item.message.isEmpty {
-                            Text(item.message).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                        }
-                    }
-                    Spacer(minLength: 2)
-                    Image(systemName: "chevron.forward")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
+            if hint {
+                wording("手动回观", "设置 › 关于 › 开始回观")
+            } else {
+                Button { finish(open) } label: {
+                    wording(item.title, item.message)
                 }
-                .padding(.leading, 12)
-                .padding(.trailing, 3)
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
+                .buttonStyle(RecallStripPress(ink: ink))
+                .accessibilityHint("打开回观")
             }
-            .buttonStyle(.plain)
-            .accessibilityHint("查看回观")
-            Button(action: dismiss) {
-                Image(systemName: "xmark")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
+            Button(hint ? "跳过" : "稍后") {
+                if hint { finish(dismiss) } else { acknowledge(); showHint() }
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("关闭回观提醒")
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(ink)
+            .frame(width: 69, height: 56)
+            .contentShape(Rectangle())
+            .buttonStyle(RecallStripPress(ink: ink))
+            .id(hint)
+            .transition(.opacity)
         }
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .task(id: item.id) {
-            // If the home surface becomes obstructed, SwiftUI cancels this task before writing "shown".
+        .frame(maxWidth: 342, minHeight: 56)
+        .background {
+            if #available(iOS 26.0, *) {
+                Color.clear.glassEffect(.regular.tint(surface.opacity(dark ? 0.25 : 0.18)), in: shape)
+            } else {
+                shape.fill(.regularMaterial)
+                    .overlay { shape.fill(surface.opacity(dark ? 0.28 : 0.19)) }
+            }
+        }
+        .overlay(alignment: .bottomLeading) {
+            if !hint && !reduceMotion {
+                Capsule().fill(accent.opacity(dark ? 0.61 : 0.49))
+                    .frame(width: 46 * progress, height: 1)
+                    .padding(.leading, 18).padding(.bottom, 6)
+                    .allowsHitTesting(false).accessibilityHidden(true)
+            }
+        }
+        .clipShape(shape)
+        .opacity(presented ? 1 : 0)
+        .offset(y: presented || reduceMotion ? 0 : -7)
+        .scaleEffect(presented || reduceMotion ? 1 : 0.982)
+        .allowsHitTesting(!closing)
+        .task {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.235)) { presented = true }
+        }
+        .task(id: hint) {
             do {
-                try await Task<Never, Never>.sleep(nanoseconds: 150_000_000)
-                if !Task.isCancelled { acknowledge() }
-            } catch { /* It never stayed visible. */ }
+                if hint {
+                    try await Task<Never, Never>.sleep(nanoseconds: item.hintNanos)
+                    if !Task.isCancelled && !closing { finish(dismiss) }
+                } else {
+                    if !reduceMotion {
+                        withAnimation(.linear(duration: Double(item.offerNanos) / 1_000_000_000)) { progress = 0 }
+                    }
+                    let grace = min(150_000_000, item.offerNanos)
+                    try await Task<Never, Never>.sleep(nanoseconds: grace)
+                    guard !Task.isCancelled, !closing else { return }
+                    acknowledge()
+                    try await Task<Never, Never>.sleep(nanoseconds: item.offerNanos - grace)
+                    if !Task.isCancelled && !closing { showHint() }
+                }
+            } catch { /* Stage changed or disappeared. */ }
         }
+    }
+
+    private func wording(_ title: String, _ subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.system(size: 14.5, weight: .semibold)).foregroundStyle(ink)
+            Text(subtitle).font(.system(size: 11.5)).foregroundStyle(dim)
+        }
+        .lineLimit(1)
+        .frame(maxWidth: .infinity, minHeight: 53, alignment: .leading)
+        .padding(.leading, 18).padding(.bottom, 3)
+        .contentShape(Rectangle())
+        .transition(.opacity)
+    }
+
+    private func showHint() {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.20)) { hint = true }
+    }
+
+    private func finish(_ action: @escaping () -> Void) {
+        guard !closing else { return }
+        closing = true
+        if reduceMotion { action(); return }
+        withAnimation(.easeIn(duration: 0.16)) { presented = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16, execute: action)
+    }
+}
+
+private struct RecallStripPress: ButtonStyle {
+    let ink: Color
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(ink.opacity(configuration.isPressed ? 0.12 : 0))
     }
 }
