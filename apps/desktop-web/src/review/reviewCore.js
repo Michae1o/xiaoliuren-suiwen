@@ -25,7 +25,7 @@
 import { RecordsStore } from '../data/recordsStore.js';
 /* 体系总纲与判据：只准从包名入口取（禁副本，见 tools/check-isolation.mjs） */
 import { SYS, buildContext, buildBlocks, plainAll } from '@xlr/shared-judgment';
-import { isLocalBase, isCtxOverflow, trimJudgeInjection, LOCAL_CTX_HINT } from '../data/llmEndpoint.js';
+import { isLocalBase, isCtxOverflow, trimJudgeInjection, localCtxHint } from '../data/llmEndpoint.js';
 
 /* ⛔ `RV_SYS`（复盘用的系统提示词）**没有切片**：它含 ≥3 个判据特征串（落宫/体用/类象），
    构建第一步的 R4 隔离闸（`tools/check-isolation.mjs`：判据特征串 ≥3 个即判「判据副本」）会直接
@@ -167,7 +167,7 @@ function reviewCase(id) {
     .catch(function (e) {
       var m3 = String(e && e.message || e);
       if (isLocalBase(s.base) && isCtxOverflow(m3)) {
-        say('<span class="rv-no">' + LOCAL_CTX_HINT + '</span>', '失败');
+        say('<span class="rv-no">' + localCtxHint(SYS, judgeText) + '</span>', '失败');
         return;
       }
       say('<span class="rv-no">复盘失败：' + esc(m3) + '</span>' +

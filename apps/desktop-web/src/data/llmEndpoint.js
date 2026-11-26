@@ -118,6 +118,14 @@ export function errOf(j) {
    ② 上下文超限的判定与文案。 */
 export var LOCAL_CTX_HINT = '上下文超限，推荐上下文：16K';
 
+/* 这一句话按**这一次请求的实际体积**算推荐值：SYS 写满以后固定 16K 就是错的。
+   向上取到 4K 的倍数，最少 8K；只输出一句，不解释。 */
+export function localCtxHint(sysText, userText) {
+  var need = estTokens(String(sysText || '') + String(userText || ''));
+  var k = Math.max(8, Math.ceil((need + 1200) / 4096) * 4);
+  return '上下文超限，推荐上下文：' + k + 'K';
+}
+
 export function trimJudgeInjection(text, g3) {
   var L = String(text || '').split('\n'), out = [], inPalace = false, keep = false;
   for (var i = 0; i < L.length; i++) {

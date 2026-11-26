@@ -23,7 +23,7 @@ import { ASK_TAIJI_IMG_MARKUP } from '../components/askTaijiImg.js';
 import { SettingsCore } from './settingsCore.js';
 /* ★ 地址换算 / 请求头 / 正文形状 / 流式增量 / 非流式正文，全走 llmEndpoint 一处
    （智谱官方地址在网页版与安卓上要换成本站中转；Anthropic 协议地址要换形状）。 */
-import { endpoint as epOf, headers as hdrsOf, payload as pyOf, deltaOf, textOf, IS_TAURI, isLocalBase, trimJudgeInjection, isCtxOverflow, LOCAL_CTX_HINT } from './llmEndpoint.js';
+import { endpoint as epOf, headers as hdrsOf, payload as pyOf, deltaOf, textOf, IS_TAURI, isLocalBase, trimJudgeInjection, isCtxOverflow, localCtxHint } from './llmEndpoint.js';
 /* 真正发请求那一下住 src/llm/（`src/data/**` 不许出现网络原语，见该文件头） */
 import { fetchLLM } from '../llm/llmFetch.js';
 import { renderDoc, htmlEsc as esc } from './docRender.js';
@@ -152,7 +152,7 @@ function askModel() {
       var m = String(e && e.message || e);
       /* ★ 本机模型：上下文超限只说一句，其余不铺 */
       if (LOCAL && isCtxOverflow(m)) {
-        doc.innerHTML = '<span style="color:var(--bad)">' + LOCAL_CTX_HINT + '</span>';
+        doc.innerHTML = '<span style="color:var(--bad)">' + localCtxHint(sysC, usrC) + '</span>';
         return;
       }
       /* 本机模型太慢/被掐断：一句话说清是我们等超时了，不是它报错 */
@@ -257,7 +257,7 @@ function streamAsk(userText, elA, onDone) {
       var m = String(e && e.message || e);
       /* 本机模型上下文超限：给出可操作的说明，不甩原始英文报错 */
       if (LOCAL && isCtxOverflow(m)) {
-        onDone(LOCAL_CTX_HINT, null);
+        onDone(localCtxHint(sysAsk, userText), null);
         return;
       }
       if (LOCAL && /decoding response body|timed out|timeout|超时/i.test(m)) {
