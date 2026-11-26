@@ -23,7 +23,7 @@ import { ASK_TAIJI_IMG_MARKUP } from '../components/askTaijiImg.js';
 import { SettingsCore } from './settingsCore.js';
 /* ★ 地址换算 / 请求头 / 正文形状 / 流式增量 / 非流式正文，全走 llmEndpoint 一处
    （智谱官方地址在网页版与安卓上要换成本站中转；Anthropic 协议地址要换形状）。 */
-import { endpoint as epOf, headers as hdrsOf, payload as pyOf, deltaOf, textOf, IS_TAURI } from './llmEndpoint.js';
+import { endpoint as epOf, headers as hdrsOf, payload as pyOf, deltaOf, textOf, IS_TAURI, isLocalBase, trimJudgeInjection, isCtxOverflow, LOCAL_CTX_HINT } from './llmEndpoint.js';
 /* 真正发请求那一下住 src/llm/（`src/data/**` 不许出现网络原语，见该文件头） */
 import { fetchLLM } from '../llm/llmFetch.js';
 import { renderDoc, htmlEsc as esc } from './docRender.js';
@@ -52,6 +52,16 @@ function loadSet() {
   try { s = JSON.parse(localStorage.getItem('xlr-llm') || '{}') || {}; } catch (e) { s = {}; }
   for (var k in DEF) if (s[k] === undefined) s[k] = DEF[k];
   return s;
+}
+
+/* ===== 本机模型专用：注入量压一档（云端不动）=====
+   压的只有「六宫属性 · 类象 · 备查」这一节（落宫留全量，其余五宫只留核心那一行）；
+   判据规则、本类断法、所问、卦体一律不动。工具本体在 llmEndpoint（解卦/接着问/复盘共用）。 */
+
+/* 这一次要发出去的判据正文：本机压一档，云端原样 */
+function judgeText() {
+  var c = window.__ctx, full = plainAllOf();
+  return isLocalBase(loadSet().base) ? trimJudgeInjection(full, c && c.g3) : full;
 }
 
 /* ★ 这三支改成薄壳、转发给 llmEndpoint（行为比以前多两件事：
@@ -105,7 +115,8 @@ function askModel() {
   var bad = needsKey(s);
   if (bad) { doc.innerHTML = '<span style="color:var(--bad)">' + esc(bad) + '</span>'; return; }
 
-  var sysC = SYS, usrC = '请按格式解这一卦：\n\n' + plainAllOf();
+  var sysC = SYS, usrC = '请按格式解这一卦：\n\n' + judgeText();
+  var LOCAL = isLocalBase(s.base);
   /* ★ 结果部分要能解三宫具象——勾了三宫具象时，
      断辞里要把三盘读出来再合回落宫（不显示依据，但解读要有它）。 */
   if (c.withXiang) usrC += '\n\n【附】这一卦带三宫具象：请在断辞里把三盘读出来（前因 → 中段 → 后果），再合回落宫；只读象、不越出这一卦。';
@@ -131,7 +142,7 @@ function askModel() {
     })
     .then(function () {
       var sec = ((Date.now() - t0) / 1000).toFixed(1);
-      stat.textContent = '模型 ' + s.model + ' · 用时 ' + sec + ' 秒 · 连接方式：' + (ep.proxy ? '本地中转' : '浏览器直连');
+      stat.textContent = '模型 ' + s.model + ' · 用时 ' + sec + ' 秒 · 连接方式：' + (ep.proxy ? '本地中转' : (LOCAL ? '本机直发' : '浏览器直连'));
       var ab = document.getElementById('askBox');
       if (ab) ab.classList.remove('off');   /* ★ 解过卦之后，「接着问」才出现 */
       updateCaseDuanci();                    /* ★ 自动记录的那一卦：补上断辞 */
@@ -139,6 +150,16 @@ function askModel() {
     })
     .catch(function (e) {
       var m = String(e && e.message || e);
+      /* ★ 本机模型：上下文超限只说一句，其余不铺 */
+      if (LOCAL && isCtxOverflow(m)) {
+        doc.innerHTML = '<span style="color:var(--bad)">' + LOCAL_CTX_HINT + '</span>';
+        return;
+      }
+      /* 本机模型太慢/被掐断：一句话说清是我们等超时了，不是它报错 */
+      if (LOCAL && /decoding response body|timed out|timeout|超时/i.test(m)) {
+        doc.innerHTML = '<span style="color:var(--bad)">本机模型生成超时（等了 15 分钟还没跑完）。换个更小的模型，或把 GPU offload 拉满、上下文降到 16K 再试。</span>';
+        return;
+      }
       /* ★ （已定的口径）：「无法连接。请检查网络设置，或更换供应商。
          」—— 网络层失败不甩 Failed to fetch，
          HTTP 错误（Key 错 / 余额不足）保留服务商原话。
@@ -192,13 +213,16 @@ function plainCore(c, B) {
 
 /* L339–360 逐字（规格 v2 §5 补两处：判据整段放最前、当时的断辞别漏 —— 断辞取本次解卦落下的 window.__md） */
 function followupUser(c, B, thread, q) {
-  /* ★ 内容只有一份：包内 followup.js（桌面/安卓/iOS 共用）。这里只负责喂料与清洗。 */
+  /* ★ 内容只有一份：包内 followup.js（桌面/安卓/iOS/小程序共用）。这里只负责喂料与清洗。 */
   var th = (thread || []).map(function (it) {
     return { q: it.q, a: String(it.a || '').replace(/<[^>]+>/g, '') };
   });
   var du = (typeof window !== 'undefined' && window.__md) || '';
+  var judge = plainCore(c, B);
+  /* 本机模型注入量压一档（与解卦同口径）；云端原样 */
+  if (isLocalBase(loadSet().base)) judge = trimJudgeInjection(judge, c && c.g3);
   return pkgFollowupUser({
-    judgeText: plainCore(c, B),
+    judgeText: judge,
     duanci: String(du).replace(/<[^>]+>/g, ''),
     thread: th,
     q: q
@@ -208,6 +232,8 @@ function followupUser(c, B, thread, q) {
 /* L362–387 逐字 */
 function streamAsk(userText, elA, onDone) {
   var s = loadSet(), ep = apiURL(), answer = '';
+  var LOCAL = isLocalBase(s.base);
+  var sysAsk = SYS;
   elA.innerHTML = '<span class="cur"></span>';
   fetchLLM(s, [
     { role: 'system', content: SYS },
@@ -227,7 +253,19 @@ function streamAsk(userText, elA, onDone) {
       }).then(function () { elA.innerHTML = renderDoc(answer); });
     })
     .then(function () { onDone(null, answer); })
-    .catch(function (e) { onDone(String(e && e.message || e), null); });
+    .catch(function (e) {
+      var m = String(e && e.message || e);
+      /* 本机模型上下文超限：给出可操作的说明，不甩原始英文报错 */
+      if (LOCAL && isCtxOverflow(m)) {
+        onDone(LOCAL_CTX_HINT, null);
+        return;
+      }
+      if (LOCAL && /decoding response body|timed out|timeout|超时/i.test(m)) {
+        onDone('本机模型生成超时（等了 15 分钟还没跑完）', null);
+        return;
+      }
+      onDone(m, null);
+    });
 }
 
 /* L389–393 逐字 */

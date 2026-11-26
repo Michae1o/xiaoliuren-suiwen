@@ -139,6 +139,8 @@ export default function SettingsScreen({ open, onClose, preload, onHuiguan }) {
      null = 正在探 / 还没探；true = 那台「本机模型」真在跑；false = 连不上。
      只对**本地地址**（localhost / 127.0.0.1）用；云端各家不探（白花请求、还容易被限流）。 */
   const [localUp, setLocalUp] = useState(null);
+  /* 本机探测的一句话结论（401 要 Key / 连不上 / 地址不对），只在本机地址时显示 */
+  const [localMsg, setLocalMsg] = useState('');
 
   const bodyRef = useRef(null);     /* `.setbody`（滚动高亮挂它，L958） */
   const wizRef = useRef(null);      /* `#stWiz`（stAgain/stStart，L504-513） */
@@ -235,17 +237,35 @@ export default function SettingsScreen({ open, onClose, preload, onHuiguan }) {
   }, [open]);
   const probeLocal = (s2, cb) => {
     const base = String((s2 && s2.base) || '').replace(/\/+$/, '');
-    if (!base) { setLocalUp(false); if (cb) cb(false); return; }
+    if (!base) { setLocalUp(false); setLocalMsg(''); if (cb) cb(false); return; }
+    const key = String((s2 && s2.key) || '');
     const run = ++probeRun.current;
     setLocalUp(null);
+    setLocalMsg('');
     let done = false;
     const fin = (up) => { if (done || run !== probeRun.current) return; done = true; setLocalUp(up); if (cb) cb(up); };
-    const t = setTimeout(() => fin(false), 6000);
+    const t = setTimeout(() => { fin(false); setLocalMsg('等不到回应——服务起来了吗？地址是不是以 /v1 结尾？'); }, 6000);
     try {
-      fetch(resolveBase(base) + '/models', { method: 'GET' })
-        .then((r) => { clearTimeout(t); fin(!!r.ok); })
-        .catch(() => { clearTimeout(t); fin(false); });
-    } catch (e) { clearTimeout(t); fin(false); }
+      /* 探活也要带 Key：LM Studio 默认就往 /v1 上挂一个 token，空手去必回 401 */
+      const h = key ? { 'Authorization': 'Bearer ' + key } : {};
+      fetch(resolveBase(base) + '/models', { method: 'GET', headers: h })
+        .then((r) => {
+          clearTimeout(t);
+          if (r.ok) { fin(true); return; }
+          if (r.status === 401 || r.status === 403) {
+            setLocalMsg('服务在跑，但它要 API Key —— 把 LM Studio 里那个 token 贴到下面第 3 步的「API Key」格里。');
+            fin(true);
+            return;
+          }
+          setLocalMsg('本机回了 HTTP ' + r.status + '，先确认地址以 /v1 结尾（例如 http://127.0.0.1:1234/v1）。');
+          fin(false);
+        })
+        .catch(() => {
+          clearTimeout(t);
+          setLocalMsg('连不上这个地址 —— 服务起来了吗？端口写对了吗？');
+          fin(false);
+        });
+    } catch (e) { clearTimeout(t); setLocalMsg('地址格式不对。'); fin(false); }
   };
 
   const pull = () => {                                                /* L607-670，逐字同构 */
@@ -303,10 +323,12 @@ export default function SettingsScreen({ open, onClose, preload, onHuiguan }) {
            本机没装 Ollama 时它会假装「拉到了」，用户以为配好了，等解卦才报连不上。
            ⇒ 本地这条直接把「怎么把它跑起来」说清楚。 */
         if (isLocalBase(base)) {
-          if (hint) hint.textContent = '连不上本机，先把它跑起来。';
-          say('bad', '连不上这个地址（' + why + '）。<br>' +
-            '① 服务起来了吗；② 地址写对了吗（一般以 <code>/v1</code> 结尾）；' +
-            '③ 再点一次「拉取可用模型」。');
+          const needKey = /HTTP 40[13]/.test(String(e.message || ''));
+          if (hint) hint.textContent = needKey ? '服务在跑，但它要 API Key。' : '连不上本机，先把它跑起来。';
+          say('bad', (needKey
+            ? '这个本机服务要 API Key（LM Studio 默认就开着 token）——把它贴到第 3 步，再点一次。<br>'
+            : '连不上这个地址（' + why + '）。<br>') +
+            (needKey ? '' : '① 服务起来了吗；② 地址写对了吗（一般以 <code>/v1</code> 结尾）；③ 再点一次「拉取可用模型」。'));
           return;
         }
         const fb = C.FALLBACK[C.guessProv(s2)] || [];
@@ -979,6 +1001,7 @@ export default function SettingsScreen({ open, onClose, preload, onHuiguan }) {
                 <button className="sbtn" type="button" id="stGuide" onClick={onGuide}>重新看配置引导（图文）</button>
                 {localOnly && !editorOpen && <button className="sbtn" type="button" id="stRecheck" onClick={() => probeLocal(C.load())}>重新检查本机地址</button>}
               </div>
+              {localOnly && !editorOpen && localMsg && <div className="hint" id="stLocalMsg">{localMsg}</div>}
               <div id="stModelEditor" hidden={!editorOpen}>
               <div className="steps" id="stWiz" ref={wizRef} tabIndex={-1} aria-label="编辑模型配置">
                 <div className="step" id="stp1"><span className="no">1</span><span className="cn">选一个服务商</span>
@@ -1016,7 +1039,7 @@ export default function SettingsScreen({ open, onClose, preload, onHuiguan }) {
                       {/* L547-558：三支（本地模型 / 有拿 Key 的地址 / 兜底）。`p` 只看 PROVS（见上面 `cur`）。 */}
                       <div className="hint" id="stKeyHint">{PORTABLE
                         ? '这份软件已经配好了，直接用就行。要换成你自己的 Key，就把新的粘进来（粘一次就顶掉包里的）。'
-                        : (isLocalBase(s.base) ? '本机服务通常不需要 API Key。' : cur && cur.url
+                        : (isLocalBase(s.base) ? '本机服务地址填好就不用管 Key 也能连（Ollama 就这样）；LM Studio 默认会开一个 token，把它贴进来。' : cur && cur.url
                           ? <>{'去哪里拿：'}<a href={cur.url} target="_blank" rel="noopener">{cur.url.replace(/^https?:\/\//, '')}</a></>
                           : '填服务商给你的 API Key，一般以 sk- 开头。')}</div>
                     </div></div></div>

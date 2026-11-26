@@ -18,6 +18,14 @@ export function resolveBase(base) {
 
 export function isAnth(base) { return /\/anthropic(\/|$)/i.test(String(base || '')); }
 
+/* 本机模型（LM Studio / Ollama / llama.cpp 之类）：只有它才需要「上下文不够」的那套提醒 */
+export function isLocalBase(base) {
+  try {
+    var h = new URL(String(base || '')).hostname.toLowerCase();
+    return h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '::1' || /^127\./.test(h);
+  } catch (e) { return false; }
+}
+
 /* 返回值形如 { url, proxy, anth, base, s } —— 与早期版本 apiURL() 的 { url, proxy, s } 兼容 */
 export function endpoint(s) {
   s = s || {};
@@ -101,4 +109,34 @@ export function errOf(j) {
   if (j.error && j.error.message) return j.error.message;
   if (j.msg) return String(j.msg);
   return '';
+}
+
+/* ===== 本机模型的两件工具（解卦 / 接着问 / 复盘共用） =====
+   ① 注入量压一档：本机 8K/16K 上下文装不下「SYS 8.5k tokens + 判据 5k tokens」。
+      只压「六宫属性 · 类象 · 备查」这一节——落宫留全量，其余五宫只留核心那一行；
+      所问、卦体、判据规则、本类断法一律不动。云端**完全不走这条**。
+   ② 上下文超限的判定与文案。 */
+export var LOCAL_CTX_HINT = '上下文超限，推荐上下文：16K';
+
+export function trimJudgeInjection(text, g3) {
+  var L = String(text || '').split('\n'), out = [], inPalace = false, keep = false;
+  for (var i = 0; i < L.length; i++) {
+    var ln = L[i];
+    if (ln.indexOf('【六宫属性') === 0) { inPalace = true; out.push(ln); continue; }
+    if (inPalace) {
+      if (/^— /.test(ln)) { inPalace = false; out.push(ln); continue; }
+      var m = /^· (\S+?)　/.exec(ln);
+      if (m) { keep = (m[1] === g3); out.push(ln); continue; }
+      if (/^\u3000\u3000/.test(ln)) { if (keep) out.push(ln); continue; }
+      out.push(ln); continue;
+    }
+    out.push(ln);
+  }
+  return out.join('\n');
+}
+
+export function estTokens(s) { return Math.round(String(s || '').length / 1.4); }
+
+export function isCtxOverflow(msg) {
+  return /context|上下文|too long|maximum|n_ctx|exceed|length|token/i.test(String(msg || ''));
 }

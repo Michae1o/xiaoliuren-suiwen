@@ -131,29 +131,27 @@ function compressReason(raw) {
 }
 
 function compressLuoVerdict(raw) {
-  let stripped = String(raw || '')
+  const stripped = String(raw || '')
     .replace(/<[^>]+>/g, '')
-    .replace(/（[^）]*）/g, '')
-    .replace(/\([^)]*\)/g, '')
+    .replace(/\*\*/g, '')
     .replace(/[「」『』]/g, '')
     .replace(/——/g, '，')
-    .replace(/\s+/g, '');
-
-  const firstSentence = (stripped.split(/[；。]/)[0] || '').trim();
-  if (!firstSentence) return '';
-  if (firstSentence.length <= 20) return firstSentence;
-  const parts = firstSentence.split(/[，、]/);
+    .replace(/\s+/g, '')
+    .trim();
+  if (!stripped) return '';
+  let segs = stripped.split(/[；。]/).map(function (s) {
+    return s.replace(/^[，,]+|[，,]+$/g, '');
+  }).filter(Boolean);
+  /* 头一个分句若只是吉凶标签，就跳过它取后面的实义——否则整段只剩「中吉」两个字 */
+  if (segs.length > 1 && /^(大吉|中吉|小吉|大凶|中凶|小凶|吉|凶)$/.test(segs[0])) segs = segs.slice(1);
   let acc = '';
-  for (const p of parts) {
-    if (!p) continue;
-    const candidate = acc ? (acc + '，' + p) : p;
-    if (candidate.length <= 20) {
-      acc = candidate;
-    } else {
-      break;
-    }
+  for (const seg of segs) {
+    const cand = acc ? (acc + '；' + seg) : seg;
+    if (acc && cand.length > 46) break;
+    acc = cand;
+    if (acc.length >= 40) break;
   }
-  return (acc && acc.length >= 4) ? acc : firstSentence.slice(0, 20);
+  return acc.replace(/[；。]$/, '');
 }
 
 /* ---------- 现有硬编码表（兜底用，不许删） ---------- */
@@ -226,126 +224,176 @@ function pickExtraReason(c) {
   return compressReason(raw);
 }
 
+/* ---------- 速断正文（第三版）
+   写法沿用上游那版：结论一行，下面一句话把「起于…途经…结果落在…」说完，再一句断辞。
+   长度纪律：总共不超过三小段、一般 60–110 字；不铺类象清单、不列条目、不写依据。
+   新判据里学到的（落宫定吉凶、本类落宫断辞、留连变数、空亡二象、天地不论吉凶）都压进那两句里，
+   不单独成段；应期和取数只在问到了才各给一行。 */
+
+const QS = {
+  '大安': '安稳未动', '留连': '拖延纠缠', '速喜': '迅猛即至',
+  '赤口': '口舌凶险', '小吉': '主动走动', '空亡': '落空不成',
+};
+const JX_ONLY = /^(大吉|中吉|小吉|大凶|中凶|小凶|吉|凶)$/;
+const JX_TAG = /^(大吉|中吉|小吉|大凶|中凶|小凶|吉|凶)\s*[；;，,]?\s*/;
+
+/* 出处号、内部标注、加粗，一律不上屏 */
+function tidyRaw(s) {
+  return String(s || '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/⛔[^。；]*/g, '')
+    .replace(/\s*J-\d{2}(-\d{2})?\s*：\s*/g, '：')
+    .replace(/（?J-\d{2}(-\d{2})?）?/g, '')
+    .replace(/（\d{3}） ?/g, '')
+    .replace(/\*\*/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
+}
+
+/* 取一句话：一两个分句，不超过 max 字；只剩吉凶标签就当没取到 */
+function oneSentence(s, max) {
+  const t = tidyRaw(s).replace(JX_TAG, '').replace(/^(但|而|故|所以)[，]?/, '');
+  if (!t) return '';
+  const parts = t.split(/[；。]/).map(function (x) { return x.trim(); }).filter(Boolean);
+  let out = '';
+  for (const p of parts) {
+    if (!out) { out = p; continue; }
+    if (out.length + 1 + p.length > max) break;
+    out += '；' + p;
+  }
+  if (!out) return '';
+  if (JX_ONLY.test(out)) return '';
+  /* 第一句本身太长就截到 max 字（尽量切在顿号/逗号处） */
+  if (out.length > max) {
+    const head = out.slice(0, max);
+    const cut = Math.max(head.lastIndexOf('、'), head.lastIndexOf('，'), head.lastIndexOf('；'));
+    out = (cut > 8 ? head.slice(0, cut) : head);
+  }
+  return out.replace(/[；，、]$/, '') + '。';
+}
+
+/* 三宫那句里的一小截 */
+function stub(s) {
+  const t = tidyRaw(s);
+  if (!t) return '';
+  const first = t.split('。')[0];
+  let out = first.length > 20 ? (first.split(/[；，]/)[0] || '') : first;
+  out = out.replace(JX_TAG, '').replace(/[；，]$/, '').trim();
+  if (!out || out.length < 3 || JX_ONLY.test(out)) return '';
+  return out;
+}
+
 export function quickRead(c, nowArg) {
   if (!c || !c.g3 || !G[c.g3]) return '';
-  const g1 = c.g1, g2 = c.g2, g3 = c.g3, GG = G[g3], q = String(c.q || '');
+  const g3 = c.g3;
+  const g1 = c.g1, g2 = c.g2;
+  const GG = G[g3];
+  const q = String(c.q || '');
   const now = (nowArg instanceof Date) ? nowArg : new Date();
 
-  /* 补齐事类通道 */
   if (!c.catKey) c.catKey = autoCat(q);
-  if (!c.cat || typeof c.cat.extra !== 'function') {
-    c.cat = CATS[c.catKey] || CATS.general;
-  }
+  const cat = CATS[c.catKey] || CATS.general;
+  const L = (cat && cat.luo) || null;
 
-  /* ---- 问法 ---- */
-  const isWhere = /哪|何处|什么地方|何方|位置|方位/.test(q);
   const isPoint = /什么时候|何时|几时|哪天|几月|哪年/.test(q);
   const isDur = /还有多久|多久能|多长时间|几天|几个月|多久/.test(q);
-  const isSuit = /适合|该不该|要不要嫁|要不要娶|值得/.test(q);
-  const isYn = /吗|嘛|是否|能否|会不会|能不能|可不可以|有没有|行不行|该不该/.test(q) || /(.)不\1/.test(q);
+  const isNum = /取数|数字|几个|多少|数几/.test(q);
+  const yn = /吗|嘛|是否|能否|会不会|能不能|可不可以|有没有|行不行|该不该/.test(q) || /(.)不\1/.test(q);
+  const yes = /吉$/.test(String(GG.jx));
 
-  let head = '', why = [];
-
-  /* ---- ① 结论：按问法给（吉凶三态） ---- */
-  if (isWhere) {
-    const keWx = KE[GG.wx];
-    const keGong = ['大安', '留连', '速喜', '赤口', '小吉', '空亡'].find(function (x) { return G[x] && G[x].wx === keWx; });
-    head = '**往' + ((keGong && G[keGong].fw) || GG.fw) + '那边找**';
-    const r = pickExtraReason(c);
-    if (r) why.push(r);
-    else why.push('方向看的是落宫克的那一宫：它在哪边，就往哪边找，以你现在住的地方为中心。');
-  } else if (isPoint) {
-    head = '**' + whenPoint(GG, now) + '**';
-    why.push('时间按这一宫管的季节推，吉的近一点，不吉的远一点。想钉到哪一年，得先知道你的属相。');
-  } else if (isDur) {
-    const d = durationOf(GG);
-    head = '**大概 ' + d.txt + '**';
-    why.push('这一宫自带三个数 ' + String(GG.san).replace(/\s/g, ' ') + '，问"还有多久"就拿它当个量。数只是参考，不是日期。');
-  } else if (isSuit && c.catKey === 'marriage') {
-    const ok = /吉$/.test(String(GG.jx));
-    head = '**' + (ok ? '适合' : '眼下还不适合') + '**';
-    why.push(marriageSuit(ok, g3));
-  } else if (c.catKey === 'weather') {
-    const d1 = compressLuoVerdict(weatherOf(g1)), d2 = compressLuoVerdict(weatherOf(g2)), d3 = compressLuoVerdict(weatherOf(g3));
-    const askRain = /会下雨|会下雪|下不下|下雨吗|下雪吗|会不会下|要下吗|下不下雨/.test(q);
+  /* ---- 天气卦单开一支：天气不看吉凶，看落宫的天象（015/077：落宫为先，天地是条件） ---- */
+  if (c.catKey === 'weather') {
+    /* 天象只取一句话：有「——」就取破折号后面那句（原文把解释放在后面），太长按分句断，不许切在词中间 */
+    const sky = (x) => {
+      let t = tidyRaw(x);
+      if (t.indexOf('——') > -1) t = t.split('——').pop();
+      let out = oneSentence(t, 22).replace(/。$/, '');
+      if (out.length > 24) {
+        const head = out.slice(0, 24);
+        const cut = Math.max(head.lastIndexOf('，'), head.lastIndexOf('、'), head.lastIndexOf('；'));
+        out = cut > 6 ? head.slice(0, cut) : head;
+      }
+      return out;
+    };
+    const sky3 = sky(L && L[g3]);
+    const sky1 = sky(L && L[g1]);
+    const sky2 = sky(L && L[g2]);
+    const askRain = /下雨|下雪|下不下|会不会下|要下吗|有雨|有雪/.test(q);
     const snow = /雪/.test(q);
+    let wHead;
+    let ok = true;
     if (askRain) {
-      head = '**' + (/雨|雪/.test(d3) ? '会' : '不会') + '**';
-      const r = pickExtraReason(c);
-      if (r) why.push(r);
-      else why.push('先看落宫：落到' + g3 + '，天象是' + d3 + '，这就是结果；天宫' + g1 + '是' + d1 + '（气）、地宫' + g2 + '是' + d2 + '（地理气温），这两宫是形成它的条件。');
+      ok = (snow ? /雪|雨|雹|雷/ : /雨|雹|雷/).test(sky3);
+      wHead = '**' + (ok ? '会' : '不会') + '（' + g3 + '：' + sky3 + '）**';
     } else {
-      head = '**' + d3 + '**';
-      why.push('先定落宫：落到' + g3 + '，天象是' + d3 + '，这就是天气本身；天宫' + g1 + '与地宫' + g2 + '是形成它的条件。');
+      wHead = '**' + g3 + '：' + sky3 + '**';
     }
-  } else if (isYn) {
-    if (!head) {
-      const lost = c.catKey === 'lost' ? compressLuoVerdict(lostOf(g3)) : null;
-      if (lost) {
-        head = '**' + lost.replace(/。$/, '') + '**';
-        const r = pickExtraReason(c);
-        if (r) why.push(r);
+    /* 三宫里跟落宫不一样的才说出来，别三遍一样 */
+    const bits = [];
+    if (sky1 && sky1 !== sky3) bits.push('起于' + sky1);
+    if (sky2 && sky2 !== sky3) bits.push('途经' + sky2);
+    const wline = (bits.length ? (bits.join('，') + '，') : '') + '落宫' + g3 + '定天象：' + sky3 + '。';
+    const wout = [wHead, wline];
+    /* 095：问「会不会下（雨/雪）」不是纯天气问题，是掺了吉凶观念的问题——
+       吉利于自己、凶不利于自己；两条路（天象 / 吉凶）要能对上。
+       默认的倾向是「不希望下」（095「他不希望下雪啊」）；若问卦人是盼着的（比如南方人盼雪），以他自己说的为准。 */
+    const good = /吉$/.test(String(GG.jx));
+    if (askRain) {
+      const favor = !ok;              /* 顺意＝不下 */
+      if (favor === good) {
+        wout.push('不管从天气看还是从吉凶看，都指向同一个方向：' + (ok ? '会下' : '不下')
+          + '；' + GG.jx + (good ? '，也顺你的意' : '，不合你的意') + '。');
       } else {
-        let verb = '';
-        for (const [k, v] of VD) if (q.indexOf(k) > -1) { verb = v; break; }
-        if (!verb) verb = q.indexOf('会') > -1 ? '会' : q.indexOf('能') > -1 ? '能' : '是';
-        const yes = /吉$/.test(String(GG.jx));
-        const negQ = /严重|要紧|危险|厉害|更糟|恶化|有没有问题|有没有事|难吗/.test(q);
-        const good = negQ ? !yes : yes;
-        const bian = /变数/.test(String(GG.xing || ''));
-
-        if (c.catKey === 'ill') {
-          /* 疾病类：由三宫格局统一判定，不凭落宫单论 */
-          const ans = good ? verb : (verb === '有' ? '没有' : '不' + verb);
-          const lv = luoVerdict(c, ans, negQ, good);
-          head = '**' + (lv || ans) + '**';
-          const r = pickExtraReason(c);
-          if (r) why.push(r);
-        } else if (bian) {
-          head = '**还没定，眼下还拖着**';
-          const r = pickExtraReason(c);
-          if (r) why.push(r);
-          else why.push('落宫是留连：六宫里只有它自带变数，不是成了，也不是没成，是还缠着。');
-        } else {
-          const ans = good ? verb : (verb === '有' ? '没有' : '不' + verb);
-          const lv = luoVerdict(c, ans, negQ, good);
-          if (lv) {
-            head = '**' + lv + '**';
-          } else {
-            head = '**' + ans + '**';
-          }
-          const r = pickExtraReason(c);
-          if (r) why.push(r);
-        }
+        wout.push('从天气看是' + (ok ? '会下' : '不下') + '，从吉凶看是' + GG.jx
+          + '（吉利于你、凶不利于你），两个方向不一致。盼着下就当会，不盼就按凶看。');
       }
     }
-  } else {
-    /* 不问吉凶的泛问：答案在落宫特性里，吉凶只作括注 */
-    head = '**' + tag(g3) + '**';
-    const r = pickExtraReason(c);
-    if (r) {
-      why.push(r);
-    } else {
-      why.push('你没问吉凶，那先看这一宫是什么脾气（'
-        + (String(GG.jx) === String(g3) ? g3 : g3 + '，' + GG.jx) + '）。');
+    if (isPoint && ok) {
+      const se = seasonOf(GG);
+      wout.push('时间看这一宫管的季节：' + se.name + '（' + se.span[0] + ' 到 ' + se.span[1] + ' 月）。');
     }
+    return wout.join('\n\n');
   }
 
-  /* ---- ② 理由：只留**一句** ---- */
-  const isWeather = c.catKey === 'weather' && !!(CATS.weather && CATS.weather.luo);
-  if (!why.length && !isWeather) {
-    /* ★ 不再用「前头克住后头／结果压住中间」那套自造话术。
-       判据第一原则第二条（J-34-02／J-30-02）写明「天地宫没有吉凶，只有客观地去分析不足，
-       或者说太过而导致了最后的结果」；三宫本身的定性是「天＝起因、地＝过程、人＝结果」
-       的相承关系（J-40-02）。下面是这两条的原话压缩，不是新的推断。 */
-    const isBad = /凶$/.test(String(GG.jx));
-    why.push(isBad
-      ? '天宫、地宫不看吉凶，只看哪些不足、哪些太过导致了这个结果。'
-      : '天是起因、地是过程、人是结果，三宫相承。');
+  /* ---- 一、结论：是非问按问句那个词答，其余给「吉凶 · 宫」 ---- */
+  let head;
+  if (yn) {
+    const VERBS = [['会不会', '会'], ['能不能', '能'], ['能否', '能'], ['可不可以', '可以'], ['可否', '可以'],
+      ['有没有', '有'], ['行不行', '行'], ['该不该', '该'], ['是不是', '是'], ['是否', '是'],
+      ['顺不顺', '顺'], ['顺利吗', '顺'], ['适合', '适合']];
+    let v = '';
+    for (const [k, val] of VERBS) if (q.indexOf(k) > -1) { v = val; break; }
+    if (!v) v = q.indexOf('能') > -1 ? '能' : (q.indexOf('会') > -1 ? '会' : (q.indexOf('有') > -1 ? '有' : '是'));
+    const neg = (v === '有') ? '没有' : (v === '可以') ? '不可以' : (v === '顺') ? '不顺' : (v === '适合') ? '不适合' : '不' + v;
+    const negQ = /有没有事|有没有问题|要紧|严重|危险|难吗|难过/.test(q);
+    let ans = yes ? v : neg;
+    if (negQ && v === '有') ans = yes ? '没有' : '有';
+    head = '**' + ans + '（' + GG.jx + ' · ' + g3 + '）**';
+  } else {
+    head = '**' + ((String(GG.jx) === g3) ? g3 : (GG.jx + ' · ' + g3)) + '**';
   }
-  if (!why.length) why.push('最后落在' + g3 + '，' + String(GG.xing || '').replace(/[。；\s]+$/, '') + '。');
 
-  return speak(head) + '\n\n' + why.slice(0, 1).map(speak).join('\n');
+  /* ---- 二、一句断辞：本类的落宫断辞优先，没有就用这一宫的性子 ---- */
+  const say = oneSentence(L && L[g3], 62) || oneSentence(GG.xing, 62);
+
+  /* ---- 三、三宫一句（早期版本写法）：起于…，途经…，结果落在… ---- */
+  /* 天/地两宫一律用六宫短标签：这样那句永远是一行短的，也不会把「病源看天宫」这类
+     本类断法错塞到天宫头上（那是断辞该说的，不是起因）。 */
+  const a1 = QS[c.g1] || '';
+  const a2 = QS[c.g2] || '';
+  const flow = (a1 && a2 && a1 === a2)
+    ? ('起于、途经都是' + a1 + '，结果落在' + g3)
+    : ('起于' + a1 + '，途经' + a2 + '，结果落在' + g3);
+  const line = flow + '：' + say;
+
+  const out = [head, line];
+
+  /* ---- 四、应期 / 取数：问到了才给，各一行 ---- */
+  if (isPoint) out.push('时间按这一宫管的季节推：' + whenPoint(GG, now) + '。');
+  else if (isDur) out.push('这一宫自带 ' + String(GG.san).replace(/\s+/g, ' ') + '，当个量看：大概 ' + durationOf(GG).txt + '。');
+  if (isNum) out.push('取数：这一宫带 ' + String(GG.san).replace(/\s+/g, '') + '，先看吉凶，再看数字。');
+
+  return out.join('\n\n');
 }
 
 export const QuickReadCore = { quickRead };

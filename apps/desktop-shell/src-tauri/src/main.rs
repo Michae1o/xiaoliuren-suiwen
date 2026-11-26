@@ -24,7 +24,11 @@ struct Req {
 #[tauri::command]
 async fn http_fetch(req: Req) -> Result<String, String> {
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(180))
+        /* 本机模型（27B 之类）一份断辞可能要跑几分钟；180 秒会在半途掐断，
+           表现成「读响应失败: error decoding response body」——那是**我们这边超时**，不是它报错。
+           900 秒 + 10 秒连接超时：连不上立刻失败，真在生成就等它。 */
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(900))
         .build()
         .map_err(|e| e.to_string())?;
 
