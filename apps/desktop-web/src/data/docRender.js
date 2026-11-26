@@ -18,7 +18,9 @@ export function htmlEsc(s) {
 }
 
 export function boldStr(s) {
-  return String(s == null ? '' : s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  /* 落单的 ** 也清掉：速断/模型现在写「**正文**（括注）」，
+     判定句正则会把闭口的 ** 吞进正文，boldStr 找不到成对就漏出来。 */
+  return String(s == null ? '' : s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*\*/g, '');
 }
 
 export function bold(s) {
@@ -56,7 +58,7 @@ export function renderDoc(t) {
     return '<div' + (lead ? ' class="jy"' : '') + '>' + (lead ? verdict(s) : boldStr(s)) + '</div>';
   }
   function verdict(s) {
-    const m = s.match(/^(\*\*)?([^（）()]{1,16})（([^（）]{0,44})）(\*\*)?(.*)$/);
+    const m = s.match(/^(\*\*)?([^（）()*]{1,16})(?:\*\*)?（([^（）]{0,44})）(\*\*)?(.*)$/);
     if (!m) return boldStr(s);
     return '<span class="vd">' + m[2] + '</span><span class="jx">（' + m[3] + '）</span>' + boldStr(m[5]);
   }

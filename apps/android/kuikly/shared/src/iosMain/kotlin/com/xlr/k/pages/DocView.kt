@@ -29,10 +29,13 @@ internal sealed interface DocBlk {
 }
 
 private val RE_HEAD = Regex("^【(.+?)】\\s*(.*)$")
-private val RE_VERDICT = Regex("^(\\*\\*)?([^（）()]{1,16})（([^（）]{0,44})）(\\*\\*)?(.*)$")
+private val RE_VERDICT = Regex("^(\\*\\*)?([^（）()*]{1,16})(?:\\*\\*)?（([^（）]{0,44})）(\\*\\*)?(.*)$")
 private val RE_BOLD = Regex("\\*\\*(.+?)\\*\\*")
 
-internal fun stripBold(s: String): String = s.replace(RE_BOLD, "$1")
+/* 去掉粗体标记。★ 速断/模型现在常写「**正文**（括注）」——
+   旧正则的正文段允许吃进 `*`，闭口的 `**` 会被吞进正文，渲染出来就是
+   「…太阳**（速喜）」。这里把落单的 `**` 也一并清掉，兜住所有老格式。 */
+internal fun stripBold(s: String): String = s.replace(RE_BOLD, "$1").replace("**", "")
 
 internal fun docBlocks(raw: String, bigFirst: Boolean = true): List<DocBlk> {
     val t = tidyDuanci(raw)
