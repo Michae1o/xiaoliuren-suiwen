@@ -128,10 +128,29 @@ function Rv({ r }) {
   );
 }
 
-/* 空态文案（`renderCases` L307–310，逐字） */
-function EmptyCases() {
+/* 区分首次使用与搜索无结果；沿用当前皮肤的墨色与强调色。 */
+function RecordsEmpty({ kind, onAction }) {
+  const [title, detail, action] = {
+    cases: ['还没有卦例', '起卦后，卦例会自动记在这里。'],
+    rules: ['还没有准则', '只有你确认的复盘，才会写入准则。', '返回卦例'],
+    search: ['没找到匹配的卦例', '换个关键词，或查看全部卦例。', '清除搜索'],
+  }[kind];
   return (
-    <div className="mini" style={{ padding: '16px 18px' }}>还没有记录。<br />每起一卦都会自动记进这里。事后回来标一下准不准——<b>错的卦才值钱</b>。<br /><br />标了「没应验」，这里会出现复盘：它得说清凭什么、错在哪、怎么修，你点「写入准则」才算数。</div>
+    <div className="rt-record-empty">
+      <svg viewBox="0 0 68 34" width="68" height="34" fill="none" aria-hidden="true">
+        <path d="M4 27c14 0 17-18 30-18 13 0 16 10 30 10" stroke="currentColor" opacity=".35" />
+        <circle cx="12" cy="24" r="1.7" fill="currentColor" opacity=".6" />
+        <circle cx="34" cy="9" r="2.5" fill="currentColor" />
+        <circle cx="57" cy="18" r="1.6" fill="currentColor" opacity=".63" />
+      </svg>
+      <div role="status">
+        <h2>{title}</h2>
+        <p>{detail}</p>
+      </div>
+      {onAction && <button type="button" className="rt-control rt-empty-action" onClick={onAction}>
+        {action} <span aria-hidden="true">›</span>
+      </button>}
+    </div>
   );
 }
 
@@ -434,22 +453,25 @@ export default function Records({ open = false, onClose }) {
       <aside className="sdb-p">
       <div className={'rt-main' + (trashReturning ? ' rt-returning' : '')} hidden={trashOpen}>
         <div className="sdb-h rt-main-header" data-search-open={tab === 'cases' && searchOpen ? 'true' : 'false'}>
-          <b>记录</b><span className="sp" />
-          <span className="n" id="sdbN">{cases.length + ' 则' + (done ? '（已标 ' + done + '）' : '')}</span>
-          {tab === 'cases' && <div className="rt-search-inline">
-            <div className="rt-search-field" hidden={!searchOpen}>
+          <b>记录</b>
+          <div className="rt-header-mid">
+            <span className="sp" />
+            <span className="n" id="sdbN">{cases.length + ' 则' + (done ? '（已标 ' + done + '）' : '')}</span>
+            {tab === 'cases' && <div className="rt-search-field" aria-hidden={!searchOpen}>
               <input ref={searchInputRef} id="sdbQ" type="search" value={q}
+                tabIndex={searchOpen ? 0 : -1}
                 placeholder="搜索卦例" aria-label="搜索卦例" onChange={(e) => changeQuery(e.currentTarget.value)} />
               {!!q && <button type="button" className="rt-search-clear rt-control" aria-label="清除搜索"
+                tabIndex={searchOpen ? 0 : -1}
                 onClick={() => { changeQuery(''); searchInputRef.current?.focus(); }}><RecordGlyph kind="close" /></button>}
-            </div>
-            <button type="button" ref={searchToggleRef} className="rt-control rt-search-toggle"
-              data-search-esc={!trashOpen && searchOpen ? 'true' : undefined}
-              data-filtered={Boolean(kw)} aria-controls="sdbQ" aria-expanded={searchOpen}
-              aria-label={searchOpen ? '收起搜索' : kw ? '展开搜索，筛选中' : '搜索卦例'} onClick={toggleSearch}>
-              <RecordGlyph kind={searchOpen ? 'chevron' : 'search'} />
-            </button>
-          </div>}
+            </div>}
+          </div>
+          {tab === 'cases' && <button type="button" ref={searchToggleRef} className="rt-control rt-search-toggle"
+            data-search-esc={!trashOpen && searchOpen ? 'true' : undefined}
+            data-filtered={Boolean(kw)} aria-controls="sdbQ" aria-expanded={searchOpen}
+            aria-label={searchOpen ? '收起搜索' : kw ? '展开搜索，筛选中' : '搜索卦例'} onClick={toggleSearch}>
+            <RecordGlyph kind={searchOpen ? 'chevron' : 'search'} />
+          </button>}
           <button className="x rt-control rt-main-close" id={trashOpen ? undefined : 'sdbClose'}
             type="button" aria-label="关闭记录" onClick={close}><RecordGlyph kind="close" /></button>
         </div>
@@ -465,20 +487,26 @@ export default function Records({ open = false, onClose }) {
               {detail ? <Detail r={detail} /> : (cases.length
                 ? (rows.length
                   ? <CaseList rows={rows} />
-                  : <div className="sdb-empty2">没有匹配的记录。</div>)
-                : <EmptyCases />)}
+                  : <RecordsEmpty kind="search" onAction={() => {
+                      changeQuery('');
+                      (searchOpen ? searchInputRef : searchToggleRef).current?.focus({ preventScroll: true });
+                    }} />)
+                : <RecordsEmpty kind="cases" />)}
             </SafeZone>
           </div>
           <div id="sdbRules" hidden={tab !== 'rules'}>
             <SafeZone what="准则">
               {rules.length
                 ? <div className="rt-record-list">{rules.slice().reverse().map((r) => <RuleRow r={r} key={r.id} />)}</div>
-                : <div className="mini" style={{ padding: '16px 18px' }}>还没有准则。<br />准则只从【你确认过的复盘】里来——不自动写、不偷偷学。</div>}
+                : <RecordsEmpty kind="rules" onAction={() => {
+                    changeTab('cases');
+                    rootRef.current?.querySelector('.stab[data-tab="cases"]')?.focus({ preventScroll: true });
+                  }} />}
             </SafeZone>
           </div>
                   </div>
         <Foot n={detail ? footSnap.current : listFootN} deadCount={dead.length} armed={armed} onTrashEnter={enterTrash} />
-        <div className="sdb-f">记下来 → 标准不准 → 没应验就复盘 → <b>你确认了才写进准则</b></div>
+        {cases.length > 0 && <div className="sdb-f">记下来 → 标准不准 → 没应验就复盘 → <b>你确认了才写进准则</b></div>}
       </div>
       {trashOpen && <RecordsTrash dead={dead} onBack={leaveTrash} onClose={close}
         onDialogChange={setTrashDialog} renderDetail={(record) => <Detail r={record} readOnly />} />}
