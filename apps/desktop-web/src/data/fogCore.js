@@ -104,9 +104,8 @@ function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { } }
 /* ---------- 档位 / 冻结（每档独立） ---------- */
 export function getFogLevel() {
   const v = parseInt(lsGet(KEY_LEVEL), 10);
-  /* 没存过就默认「轻柔流动」（安卓默认是 0=静态；桌面屏幕大、静帧更淡，默认给会动的那档才看得见）。
-     ⚠ 用户自己选过就完全听他的（包括选回静态）。 */
-  return (v >= 0 && v <= 2) ? v : 1;
+  /* 没有保存过选择时先铺静态雾景。流动档由用户在外观设置里开启。 */
+  return (v >= 0 && v <= 2) ? v : 0;
 }
 export function setFogLevel(level) {
   const n = Math.max(0, Math.min(2, level | 0));
@@ -246,16 +245,6 @@ export function durationFor(scene) {
 }
 
 /* ---------- 实时流雾 ---------- */
-let glProbe = null;
-export function realtimeAvailable() {
-  if (glProbe !== null) return glProbe;
-  try {
-    const cv = document.createElement('canvas');
-    glProbe = !!(cv.getContext('webgl2') || cv.getContext('webgl'));
-  } catch (e) { glProbe = false; }
-  return glProbe;
-}
-
 export function shaderPalette(skin) {
   const p = REALTIME_PALETTE[skin] || REALTIME_PALETTE.bw;
   const cols = p.colors.map(function (c) {
@@ -363,5 +352,5 @@ export const FogCore = {
   FOG_LEVELS, SKIN_CLOUDS, PNG_CLOCK_MS, PNG_CLOCK_S,
   getFogLevel, setFogLevel, isFogFrozen, toggleFogFrozen,
   getPhase, savePhase, getSeed, sceneFor, secondsFor, durationFor, layerStyle,
-  realtimeAvailable, realtimeSkins, REALTIME_SKINS, shaderPalette, FOG_GLSL
+  realtimeSkins, REALTIME_SKINS, shaderPalette, FOG_GLSL
 };

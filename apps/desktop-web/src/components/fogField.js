@@ -39,6 +39,8 @@ let gpuDpr = 1;
 let fadeAnim = null;
 let resizeTimer = 0;
 let started = false;
+let realtimeFailed = false;
+const realtimeListeners = new Set();
 
 function curSkin() {
   return document.documentElement.getAttribute('data-skin') || 'bw';
@@ -63,10 +65,9 @@ function mountRoot() {
 }
 
 function clearStage() {
-  if (gl) {
-    try { gl.getExtension('WEBGL_lose_context') && gl.getExtension('WEBGL_lose_context').loseContext(); } catch (e) { }
-  }
+  const previousGl = gl;
   gl = null; glProg = null; glUni = {}; canvas = null;
+  try { previousGl?.getExtension('WEBGL_lose_context')?.loseContext(); } catch (e) { }
   if (stageEl) { stageEl.textContent = ''; }
   clouds = [];
 }
@@ -124,6 +125,11 @@ function initGL() {
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);   /* 着色器输出已预乘 */
   sizeGL();
+  canvas.addEventListener('webglcontextlost', (event) => {
+    if (event.currentTarget !== canvas) return;
+    fallbackToStaticFog();
+    tick(performance.now(), true);
+  }, { once: true });
 }
 
 function sizeGL() {
@@ -193,10 +199,20 @@ function paintClouds(seconds) {
   }
 }
 
+function fallbackToStaticFog() {
+  stop();
+  clearStage();
+  scene = FogCore.sceneFor(scene.skin, 0);
+  buildClouds();
+  // 本次打开期间沿用静态雾景，避免缩放或换肤后重新启用绘制失败的效果。
+  realtimeFailed = true;
+  realtimeListeners.forEach(listener => listener());
+}
+
 /* ---------- 生命周期 ---------- */
 function rebuild() {
   clearStage();
-  scene = FogCore.sceneFor(skin, level);
+  scene = FogCore.sceneFor(skin, level === 2 && realtimeFailed ? 0 : level);
   const de = document.documentElement;
   if (!scene) { rootEl.setAttribute('data-fog', '0'); de.setAttribute('data-fog', '0'); stop(); return; }
   rootEl.setAttribute('data-fog', '1');
@@ -205,16 +221,15 @@ function rebuild() {
   rootEl.setAttribute('data-skin', skin);
   clock = FogCore.getPhase(skin);
   frozen = FogCore.isFogFrozen(level);
-  const realtime = level === 2 && FogCore.realtimeAvailable() &&
-    FogCore.REALTIME_SKINS.indexOf(skin) >= 0;
+  const realtime = scene.level === 2 && FogCore.REALTIME_SKINS.includes(skin);
   if (realtime) {
-    try { initGL(); } catch (e) { /* 显卡/上下文失败 → 退回贴图档，不留空白 */ scene = FogCore.sceneFor(skin, 1); buildClouds(); }
+    try { initGL(); } catch (e) { fallbackToStaticFog(); }
   } else {
     buildClouds();
   }
   /* 静态档 / 冻结档：只画一帧，一个 rAF 都不开（安卓也是停表，不是空转） */
   tick(performance.now(), true);
-  if (level > 0 && !frozen) start(); else stop();
+  if (scene.level > 0 && !frozen) start(); else stop();
 }
 
 function start() {
@@ -239,7 +254,7 @@ function loop(ts) {
 
 function tick(ts, force) {
   if (!scene) return;
-  const moving = level > 0 && !frozen;
+  const moving = scene.level > 0 && !frozen;
   if (moving) {
     if (!lastTs) lastTs = ts;
     const dt = Math.min(200, Math.max(0, ts - lastTs));   /* 切页回来不跳一大段 */
@@ -322,7 +337,7 @@ export const FogField = {
     const nextFrozen = FogCore.isFogFrozen(level);
     if (nextFrozen !== wasFrozen) {
       if (nextFrozen) { FogCore.savePhase(skin, clock); frozen = true; stop(); }
-      else { frozen = false; lastTs = 0; start(); }
+      else { frozen = false; lastTs = 0; if (scene?.level > 0) start(); }
       return true;
     }
     if (skin !== curSkin()) { skin = curSkin(); swapWithFade(rebuild); return true; }
@@ -333,6 +348,11 @@ export const FogField = {
       level: level, frozen: frozen, skin: skin, clock: clock,
       clouds: clouds.length, gl: !!gl, mounted: !!(rootEl && rootEl.isConnected)
     };
+  },
+  realtimeAvailable: () => !realtimeFailed,
+  subscribeRealtime(listener) {
+    realtimeListeners.add(listener);
+    return () => { realtimeListeners.delete(listener); };
   },
   node: function () { return rootEl; }
 };

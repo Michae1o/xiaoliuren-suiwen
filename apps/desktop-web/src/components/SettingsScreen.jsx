@@ -25,7 +25,7 @@
  *   ** 已落地（）**：`#stThemes` 点击(L910-915) + `renderThemes()`(L573-578)
  *   —— 走 `src/data/skinApply.js`（与  换皮肤面板**共用一份**， 已解）
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import modelSettingsCss from '../styles/modelSettings.css?inline';
 import { SettingsCore as C } from '../data/settingsCore.js';
 /* 「MCP接入」那一节：桥在 data/mcpBridge.js，这里只摆 DOM（见 McpSection.jsx 头注） */
@@ -85,6 +85,8 @@ export default function SettingsScreen({ open, onClose, preload, onHuiguan }) {
   /* 背景雾气：档位与「冻结」都读同一份 FogCore（与 #xlrFog 共用，不另存一份） */
   const [fogLevel, setFogLevel] = useState(() => FogCore.getFogLevel());
   const [fogFrozen, setFogFrozen] = useState(() => FogCore.isFogFrozen(FogCore.getFogLevel()));
+  const realtimeFogAvailable = useSyncExternalStore(FogField.subscribeRealtime, FogField.realtimeAvailable);
+  const fogUsesFallback = fogLevel === 2 && !realtimeFogAvailable;
   const onFogLevel = (n) => {
     const v = FogCore.setFogLevel(n);
     setFogLevel(v);
@@ -1102,13 +1104,13 @@ export default function SettingsScreen({ open, onClose, preload, onHuiguan }) {
                 <div className="fog-hint" id="stFogHint">
                   {fogLevel === 0 ? '淡雾静置，减少动态消耗。'
                     : fogLevel === 1 ? '雾气沿平滑路径缓缓游移。'
-                      : !FogCore.realtimeAvailable() ? '当前环境不支持实时流雾，已退回轻柔流动。'
+                      : fogUsesFallback ? '实时流雾暂不可用，已切换到静态雾景。'
                         : '雾形持续变化、交织流动。'}
                 </div>
-                {fogLevel > 0 ? (
+                {fogLevel > 0 && !fogUsesFallback ? (
                   <FogSwitch checked={fogFrozen} onChange={onFogFreeze} label="冻结雾气"
                     hint={fogFrozen ? '已停在当前画面，关闭后继续流动。'
-                      : (fogLevel === 2 && FogCore.realtimeAvailable())
+                      : fogLevel === 2
                         ? '开启后定格当前雾景，停止持续生成。'
                         : '开启后停在此刻，减少持续动画开销。'} />
                 ) : null}

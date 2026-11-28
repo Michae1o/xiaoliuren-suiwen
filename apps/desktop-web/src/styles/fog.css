@@ -324,6 +324,17 @@ html[data-fog] #setScreen.setscreen{
   backdrop-filter:blur(6px) !important;
 }
 
+@media (prefers-reduced-transparency: reduce){
+  html[data-step="q"]:not([data-skin="tonggu"]) .cmain,
+  html[data-fog]:not([data-skin="tonggu"]) .top-in :is(.tbtn,.ibt),
+  #setScreen.setscreen,
+  html[data-fog] #setScreen.setscreen{
+    background-color:var(--bg) !important;
+    -webkit-backdrop-filter:none !important;
+    backdrop-filter:none !important;
+  }
+}
+
 html[data-fog]:not([data-skin="tonggu"]) textarea:focus,
 html[data-fog]:not([data-skin="tonggu"]) input:focus,
 html[data-fog]:not([data-skin="tonggu"]) select:focus{
