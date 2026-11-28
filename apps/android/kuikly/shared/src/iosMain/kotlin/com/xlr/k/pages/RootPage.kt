@@ -153,6 +153,7 @@ private fun RootScreen() {
                 dt,
                 manualNums = if (Session.numManual && Session.nums().none { it.trim().isEmpty() }) Session.nums() else null,
                 ziOverride = if (Session.ziTouchH2) Session.ziH2 else null,
+                hourCycle = Platform.hourCycle?.invoke(),
             )
         } ?: return@doCast
         Session.cast = c

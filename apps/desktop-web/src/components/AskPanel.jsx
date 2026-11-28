@@ -349,9 +349,29 @@ function useAskCore() {
 
     /* ④ 每 2 秒刷时钟（源 L164：只在「时间取数」下刷）。⚠ 外壳已把 legacy 的同名 timer 中和成 no-op，
           保证 `#castMini`/九数**只有一个写者**。 */
+    const syncOsHourCycle = function () {
+      try {
+        const tw = window.__TAURI__;
+        const inv = tw && ((tw.core && tw.core.invoke) || (tw.tauri && tw.tauri.invoke));
+        if (!inv) return;
+        Promise.resolve(inv('os_hour_cycle')).then(function (hc) {
+          if (hc && typeof hc === 'string' && window.__XLR_HOUR_CYCLE__ !== hc) {
+            window.__XLR_HOUR_CYCLE__ = hc;
+            if ((window.__mode || 'clock') === 'clock') AskCore.refreshClock();
+          }
+        }, function () { });
+      } catch (eOHC) { }
+    };
+    syncOsHourCycle();
+    window.addEventListener('focus', syncOsHourCycle);
     const t = setInterval(function () { if ((window.__mode || 'clock') === 'clock') AskCore.refreshClock(); }, 2000);
     mark('clock2s');
-    return function () { clearInterval(t); if (tNumStep) clearInterval(tNumStep); window.removeEventListener('keydown', onEnterKey, true); };
+    return function () {
+      clearInterval(t);
+      if (tNumStep) clearInterval(tNumStep);
+      window.removeEventListener('keydown', onEnterKey, true);
+      window.removeEventListener('focus', syncOsHourCycle);
+    };
   }, []);
 }
 

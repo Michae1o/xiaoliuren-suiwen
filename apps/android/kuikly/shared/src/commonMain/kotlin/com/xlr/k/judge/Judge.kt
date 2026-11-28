@@ -8,7 +8,15 @@ import kotlinx.datetime.LocalDateTime
 
 internal data class LunarDate(val y: Int, val m: Int, val d: Int, val leap: Int)
 
-internal data class ClockNums(val hh: Int, val mm: Int, val raw: List<Int>, val nums: List<Int>, val zi: Int)
+internal data class ClockNums(
+    val hh: Int,
+    val mm: Int,
+    val raw: List<Int>,
+    val nums: List<Int>,
+    val zi: Int,
+    val hh24: Int = hh,
+    val hourCycle: String = "h23",
+)
 
 internal data class Cast(
     val steps: List<Int>,
@@ -47,14 +55,44 @@ internal data class Context(
 /** judgment.js:438 —— 六宫进位（0 基，六宫循环） */
 internal fun advance(gi: Int, steps: Int): Int = (gi + steps - 1) % 6
 
-/** cast.js:7-12 —— 时间取数：时 / 分十位 / 分个位，0 按 10 取 */
-internal fun clockNums(dt: LocalDateTime): ClockNums {
-    val hh = dt.hour
+private fun normHourCycle(hc: String?): String =
+    if (hc == "h24" || hc == "h23" || hc == "h12" || hc == "h11") hc else ""
+
+internal fun hourCycleFromPattern(pat: String): String {
+    var inQuote = false
+    for (ch in pat) {
+        if (ch == '\'') {
+            inQuote = !inQuote
+            continue
+        }
+        if (inQuote) continue
+        when (ch) {
+            'k' -> return "h24"
+            'H' -> return "h23"
+            'h' -> return "h12"
+            'K' -> return "h11"
+        }
+    }
+    return ""
+}
+
+internal fun displayHour(hh24: Int, hourCycle: String? = null): Int = when (normHourCycle(hourCycle)) {
+    "h24" -> if (hh24 == 0) 24 else hh24
+    "h12" -> (hh24 % 12).let { if (it == 0) 12 else it }
+    "h11" -> hh24 % 12
+    else -> hh24
+}
+
+/** 时间取数：按宿主机器时钟制式显示时数（h24/h23/h12/h11），0 按 10 取；zi 始终按 24 小时真时刻算 */
+internal fun clockNums(dt: LocalDateTime, hourCycle: String? = null): ClockNums {
+    val hh24 = dt.hour
     val mm = dt.minute
+    val hc = normHourCycle(hourCycle).ifEmpty { "h23" }
+    val hh = displayHour(hh24, hc)
     val raw = listOf(hh, mm / 10, mm % 10)
     val nums = raw.map { if (it == 0) 10 else it }
-    val zi = ((hh + 1) shr 1) % 12 + 1
-    return ClockNums(hh = hh, mm = mm, raw = raw, nums = nums, zi = zi)
+    val zi = ((hh24 + 1) shr 1) % 12 + 1
+    return ClockNums(hh = hh, mm = mm, raw = raw, nums = nums, zi = zi, hh24 = hh24, hourCycle = hc)
 }
 
 /** cast.js:15-20 —— 报数归一：取绝对值，0 按 10 取 */
@@ -89,16 +127,22 @@ private fun finish(steps: List<Int>, zi: Int): Cast {
 private fun mm2(mm: Int): String = if (mm < 10) "0$mm" else "$mm"
 
 /** 分支 A：时间取数（时钟或手改三个数）。ziOverride = 用户手选了时辰（旧 变更记录） */
-internal fun castByClock(dt: LocalDateTime, manualNums: List<String?>? = null, ziOverride: Int? = null): Cast {
-    val t = clockNums(dt)
+internal fun castByClock(
+    dt: LocalDateTime,
+    manualNums: List<String?>? = null,
+    ziOverride: Int? = null,
+    hourCycle: String? = null,
+): Cast {
+    val t = clockNums(dt, hourCycle)
     val manual = manualNums != null && numsFilled(manualNums)
     val steps = if (manual) normalizeNums(manualNums!!) else t.nums
     val z = ziOverride ?: t.zi
     val r = finish(steps, z)
+    val hasZero = t.raw.any { it == 0 }
     val src = if (manual) {
         "时间取数·手改 ${steps.joinToString(" / ")}，${ZHI[z - 1]}时"
     } else {
-        "时间取数 ${t.hh}:${mm2(t.mm)} ⇒ ${steps.joinToString(" / ")}，${ZHI[z - 1]}时"
+        "时间取数 ${t.hh}:${mm2(t.mm)} ⇒ ${t.raw.joinToString(" / ")}${if (hasZero) "（0 按 10 取）" else ""}，${ZHI[z - 1]}时"
     }
     return r.copy(mode = if (manual) "clock-manual" else "clock-auto", src = src, clock = t)
 }

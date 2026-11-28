@@ -37,6 +37,7 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread { if (!isFinishing && !isDestroyed) RecallSystemReminder.setEnabled(this, value) }
         }
         syncRecallNotificationSwitch()
+        com.xlr.k.pages.Platform.hourCycle = { detectAndroidHourCycle(applicationContext) }
         com.xlr.k.UpdHost.install(applicationContext)
         /* ★
            皮肤原先在 RootPage 组合里才 Skin.load()，第一帧已经用默认的 bw 画完了，
@@ -311,6 +312,29 @@ class MainActivity : AppCompatActivity() {
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             window.attributes = attrs
         }
+    }
+
+    private fun detectAndroidHourCycle(ctx: android.content.Context): String {
+        val is24 = android.text.format.DateFormat.is24HourFormat(ctx)
+        val fmt = android.text.format.DateFormat.getTimeFormat(ctx)
+        if (fmt is java.text.SimpleDateFormat) {
+            val pat = fmt.toPattern()
+            var inQuote = false
+            for (ch in pat) {
+                if (ch == '\'') {
+                    inQuote = !inQuote
+                    continue
+                }
+                if (inQuote) continue
+                when (ch) {
+                    'k' -> return "h24"
+                    'H' -> return "h23"
+                    'h' -> return "h12"
+                    'K' -> return "h11"
+                }
+            }
+        }
+        return if (is24) "h23" else "h12"
     }
 
     companion object {

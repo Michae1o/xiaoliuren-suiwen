@@ -93,6 +93,8 @@ object Platform {
     var updDownload: ((String, String) -> String)? = null
     /** 把下好的 APK 交系统安装器 */
     var updInstall: ((String) -> Unit)? = null
+    /** 宿主当前系统时钟制式（"h24" | "h23" | "h12" | "h11"） */
+    var hourCycle: (() -> String)? = null
 }
 
 /** 更新清单里的一条（只取用得到的字段） */

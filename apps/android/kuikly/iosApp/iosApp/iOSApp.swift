@@ -8,6 +8,27 @@ struct iOSApp: App {
         // 把宿主的「存储 / 网络 / 触感 / 剪贴板 / 导出」接到共享层的 Platform 上。
         // 对应安卓 MainActivity 里那一段赋值；不接的话共享层会静默降级（能显示，但存不了、连不上模型）。
         PlatformIos.shared.install()
+        PlatformIos.shared.setHourCycle { Self.detectHourCycle() }
+    }
+
+    private static func detectHourCycle() -> String {
+        let pat = DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: .current) ?? ""
+        var inQuote = false
+        for ch in pat {
+            if ch == "'" {
+                inQuote.toggle()
+                continue
+            }
+            if inQuote { continue }
+            switch ch {
+            case "k": return "h24"
+            case "H": return "h23"
+            case "h": return "h12"
+            case "K": return "h11"
+            default: break
+            }
+        }
+        return "h23"
     }
 
     var body: some Scene {

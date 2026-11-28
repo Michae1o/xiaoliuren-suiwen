@@ -319,6 +319,72 @@ fn app_platform() -> &'static str {
     std::env::consts::OS
 }
 
+#[cfg(target_os = "windows")]
+extern "system" {
+    fn GetLocaleInfoEx(
+        lpLocaleName: *const u16,
+        lctype: u32,
+        lpLCData: *mut u16,
+        cchData: i32,
+    ) -> i32;
+}
+
+#[cfg(target_os = "windows")]
+fn read_win_locale_str(lctype: u32) -> String {
+    let mut buf = [0u16; 128];
+    let n = unsafe { GetLocaleInfoEx(std::ptr::null(), lctype, buf.as_mut_ptr(), buf.len() as i32) };
+    if n <= 1 {
+        return String::new();
+    }
+    let len = (n as usize).min(buf.len()).saturating_sub(1);
+    String::from_utf16_lossy(&buf[..len])
+}
+
+#[cfg(target_os = "windows")]
+fn win_hour_cycle_from_pattern(pat: &str) -> &'static str {
+    let mut in_quote = false;
+    for ch in pat.chars() {
+        if ch == '\'' {
+            in_quote = !in_quote;
+            continue;
+        }
+        if in_quote {
+            continue;
+        }
+        match ch {
+            'k' => return "h24",
+            'H' => return "h23",
+            'h' => return "h12",
+            'K' => return "h11",
+            _ => {}
+        }
+    }
+    ""
+}
+
+/// 读取宿主的系统时钟制式（"h24" | "h23" | "h12" | "h11"；非 Windows 返回空串由前端 Intl 判断）
+#[tauri::command]
+fn os_hour_cycle() -> &'static str {
+    #[cfg(target_os = "windows")]
+    {
+        const LOCALE_SSHORTTIME: u32 = 0x0000_0079;
+        const LOCALE_ITIME: u32 = 0x0000_0023;
+        let hc = win_hour_cycle_from_pattern(&read_win_locale_str(LOCALE_SSHORTTIME));
+        if !hc.is_empty() {
+            return hc;
+        }
+        return match read_win_locale_str(LOCALE_ITIME).trim() {
+            "0" => "h12",
+            "1" => "h23",
+            _ => "",
+        };
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        ""
+    }
+}
+
 #[tauri::command]
 fn app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
@@ -604,6 +670,7 @@ fn main() {
             save_export,
             app_version,
             app_platform,
+            os_hour_cycle,
             apply_update,
             update_progress,
             quit_app,

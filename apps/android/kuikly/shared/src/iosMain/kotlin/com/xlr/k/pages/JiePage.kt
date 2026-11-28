@@ -324,7 +324,8 @@ internal suspend fun askNow(ctx: Context, blocks: List<Block>) {
     try {
         val user = "请按格式解这一卦：\n\n" + com.xlr.k.judge.plainAll(ctx, blocks)
         /* 流式：每来一段就把「已累计全文」写回界面（早期版本就是这个观感） */
-        val out = askModelStream(cfg, com.xlr.k.judge.SYS, user) { t ->
+        val sys = com.xlr.k.judge.SYS
+        val out = askModelStream(cfg, sys, user) { t ->
             if (Session.castSeq == seq) Session.askAnswer = t
         }
         /* 解卦途中换了卦：这一趟的文字与落款都不算当前这一卦的，丢掉 */

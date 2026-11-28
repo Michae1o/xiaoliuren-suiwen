@@ -120,17 +120,18 @@ function refreshClock() {
   var t = clockNums(), p = function (x) { return (x < 10 ? '0' : '') + x; };
   /* ★ 手改过就不再被时钟覆盖（收起九数、或换起卦方式即恢复自动） */
   if (!window.__numManual) {
-    for (var i = 1; i <= 3; i++) { document.getElementById('n' + i).value = String(t.nums[i - 1]); }
+    for (var i = 1; i <= 3; i++) { document.getElementById('n' + i).value = String(t.raw[i - 1]); }
   }
   var cfAuto = document.getElementById('castFields');
   if (cfAuto) cfAuto.classList.toggle('auto', !window.__numManual);
   var mini = document.getElementById('castMini');
   if (!mini) return;
+  var hasZero = t.raw.some(function (v) { return v === 0; });
   var preT = window.__numManual ? '手动取数：按 ' : '时间取数：现在是 ';
   var midT = window.__numManual ? numVals().join(' / ') : (t.hh + ':' + p(t.mm));
   var postT = window.__numManual
     ? ' 起卦 · ' + zhi[t.zi - 1] + '时（收起九数就回到自动）'
-    : ' ⇒ 按 ' + t.nums.join(' / ') + ' 起卦 · ' + zhi[t.zi - 1] + '时（软件自动读取，起卦以当时为准）';
+    : ' ⇒ 按 ' + t.raw.join(' / ') + ' 起卦' + (hasZero ? '（0 按 10 取）' : '') + ' · ' + zhi[t.zi - 1] + '时（软件自动读取，起卦以当时为准）';
   /* ★ 口径：（）：「一切动画结束、其他元素浮现完毕之后，方框内还是会闪一下变成空再恢复」。
      真因就是这两行老代码——每次刷新都用 innerHTML **整块重写**，里面的 <b>（时刻）被销毁重建，
      所以每 2 秒就闪一次。改成**原地更新文本节点**：结构只建一次，之后只改 nodeValue/textContent。 */

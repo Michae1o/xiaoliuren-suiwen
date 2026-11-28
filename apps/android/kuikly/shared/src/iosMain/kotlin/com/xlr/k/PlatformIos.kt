@@ -69,6 +69,11 @@ object PlatformIos {
         installTheme()
     }
 
+    /** 供 Swift 侧在启动时注入系统时钟制式读取（h24 / h23 / h12 / h11） */
+    fun setHourCycle(provider: () -> String) {
+        Platform.hourCycle = provider
+    }
+
     /* 皮肤深浅 → SwiftUI 层（它据此切 preferredColorScheme，状态栏文字颜色跟着变）。
        ⚠ 不走 Kotlin 回调桥：((Boolean) -> Unit) 到 Swift 侧是 KotlinBoolean，映射别扭；
          NSNotification + userInfo 更省事。dark 用 0/1 传，Swift 侧读 NSNumber 不会踩类型。 */

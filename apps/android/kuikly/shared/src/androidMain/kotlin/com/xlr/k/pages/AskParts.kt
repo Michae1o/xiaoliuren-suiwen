@@ -180,19 +180,22 @@ internal fun Modifier.tapOrLongPress(
     }
 }
 
-/* 当前时钟读数（与判据同一份 clockNums） */
-private fun nowClock() = clockNums(Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()))
+/* 当前时钟读数（与判据同一份 clockNums，按宿主时钟制式显示时数） */
+private fun nowClock() = clockNums(
+    Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()),
+    Platform.hourCycle?.invoke(),
+)
 
 /** 当前应采用哪个时辰：自己点过就用点的，没点过就按此刻 */
 internal fun ziNow(mode: String): Int =
     if (mode == "time") (if (Session.ziTouchH1) Session.ziH1 else nowClock().zi)
     else (if (Session.ziTouchH2) Session.ziH2 else nowClock().zi)
 
-/** 旧 refreshClock：没手改过就把三个数刷成当前时钟的读数（只在「时间取数」下自动刷） */
+/** 旧 refreshClock：没手改过就把三个数刷成当前时钟的展示数（只在「时间取数」下自动刷） */
 internal fun refreshClockNums() {
     if (Session.mode != "clock" || Session.numManual) return
     val t = nowClock()
-    Session.setNums(t.nums.map { it.toString() })
+    Session.setNums(t.raw.map { it.toString() })
 }
 
 /** 旧 setMode：状态 + 副作用（暂存/恢复九数、开合详情、清手改标记） */
@@ -231,8 +234,9 @@ internal fun miniText(mode: String): String = when (mode) {
         if (Session.numManual) {
             "手动取数：按 " + Session.nums().joinToString(" / ") + " 起卦 · " + ZHI[t.zi - 1] + "时（收起九数就回到自动）"
         } else {
-            "时间取数：现在是 " + t.hh + ":" + p(t.mm) + " ⇒ 按 " + t.nums.joinToString(" / ") +
-                " 起卦 · " + ZHI[t.zi - 1] + "时（软件自动读取，起卦以当时为准）"
+            val tail = if (t.raw.any { it == 0 }) "（0 按 10 取）" else ""
+            "时间取数：现在是 " + t.hh + ":" + p(t.mm) + " ⇒ 按 " + t.raw.joinToString(" / ") +
+                " 起卦" + tail + " · " + ZHI[t.zi - 1] + "时（软件自动读取，起卦以当时为准）"
         }
     }
 }
